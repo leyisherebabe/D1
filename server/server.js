@@ -118,6 +118,59 @@ wss.on('connection', (ws, req) => {
           // Diffuser la liste des utilisateurs mise à jour
           broadcastUserList();
         }
+      } else if (parsedMessage.type === 'admin_action') {
+        // Gérer les actions administratives
+        if (parsedMessage.action === 'ban_user') {
+          const targetUserId = parsedMessage.targetUserId;
+          console.log('Admin action: Ban user', targetUserId);
+          
+          // Trouver et déconnecter l'utilisateur ciblé
+          let targetWs = null;
+          for (const [ws, userInfo] of connectedUsers.entries()) {
+            if (userInfo.id === targetUserId) {
+              targetWs = ws;
+              break;
+            }
+          }
+          
+          if (targetWs) {
+            const userInfo = connectedUsers.get(targetWs);
+            console.log('Banning user:', userInfo.username);
+            
+            // Envoyer un message de bannissement à l'utilisateur
+            if (targetWs.readyState === WebSocket.OPEN) {
+              targetWs.send(JSON.stringify({
+                type: 'banned',
+                message: 'Vous avez été banni de la plateforme.'
+              }));
+            }
+            
+            // Fermer la connexion après un court délai
+            setTimeout(() => {
+              targetWs.close(1000, 'User banned');
+            }, 1000);
+            
+            // Diffuser un message système à tous les clients
+            const banMessage = {
+              type: 'chat_message',
+              message: {
+                id: Date.now().toString(),
+                username: 'StreamBot',
+                message: `🚫 ${userInfo.username} a été banni de la plateforme.`,
+                timestamp: new Date().toISOString(),
+                role: 'admin',
+                isSystem: true,
+                color: '#ef4444'
+              }
+            };
+            
+            wss.clients.forEach(client => {
+              if (client !== targetWs && client.readyState === WebSocket.OPEN) {
+                client.send(JSON.stringify(banMessage));
+              }
+            });
+          }
+        }
       } else {
         console.log('Received non-handled message type:', parsedMessage.type);
       }

@@ -24,6 +24,7 @@ import { ChatMessage, ConnectedUser, StreamLog, Report, PopupAnnouncement } from
 interface AdminPageProps {
   allChatMessages: ChatMessage[];
   allConnectedUsers: ConnectedUser[];
+  wsService: any;
   onDeleteMessage: (messageId: string) => void;
   onMuteUser: (username: string, moderatorUsername: string) => void;
   onBanUser: (username: string, moderatorUsername: string) => void;
@@ -32,6 +33,7 @@ interface AdminPageProps {
 const AdminPage: React.FC<AdminPageProps> = ({
   allChatMessages,
   allConnectedUsers,
+  wsService,
   onDeleteMessage,
   onMuteUser,
   onBanUser
@@ -119,18 +121,28 @@ const AdminPage: React.FC<AdminPageProps> = ({
   };
 
   const banUser = (userId: string) => {
-    if (confirm('Êtes-vous sûr de vouloir bannir cet utilisateur ?')) {
-      // Note: Dans une vraie implémentation, ceci devrait envoyer une commande au serveur
-      // pour bannir l'utilisateur. Pour l'instant, on simule juste avec un log.
-      
-      const logEntry: StreamLog = {
-        id: Date.now().toString(),
-        action: 'USER_BANNED',
-        details: 'Utilisateur banni par l\'administrateur',
-        timestamp: new Date(),
-        username: allConnectedUsers.find(u => u.id === userId)?.username
-      };
-      setStreamLogs(prev => [logEntry, ...prev]);
+    const user = allConnectedUsers.find(u => u.id === userId);
+    if (user && confirm(`Êtes-vous sûr de vouloir bannir ${user.username} ?`)) {
+      // Envoyer la commande de bannissement au serveur
+      if (wsService) {
+        wsService.sendAdminAction('ban_user', userId, user.username);
+        
+        // Ajouter un log local
+        const logEntry: StreamLog = {
+          id: Date.now().toString(),
+          action: 'USER_BANNED',
+          details: `Utilisateur ${user.username} banni par l'administrateur`,
+          timestamp: new Date(),
+          username: user.username,
+          ip: user.ip
+        };
+        setStreamLogs(prev => [logEntry, ...prev]);
+        
+        // Notification de succès
+        alert(`✅ ${user.username} a été banni avec succès.`);
+      } else {
+        alert('❌ Erreur: Connexion WebSocket non disponible.');
+      }
     }
   };
 

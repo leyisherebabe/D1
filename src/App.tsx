@@ -94,6 +94,11 @@ function App() {
         } else if (data.type === 'chat_message' && data.message) {
           // Ajouter le message de chat reçu à l'état global
           setAllChatMessages(prev => [...prev.slice(-49), data.message]);
+        } else if (data.type === 'banned') {
+          // L'utilisateur a été banni
+          alert('⚠️ ' + data.message);
+          // Déconnecter l'utilisateur
+          handleLogout();
         }
       };
     }
@@ -604,6 +609,7 @@ function App() {
           <AdminPage
             allChatMessages={allChatMessages}
             allConnectedUsers={allConnectedUsers}
+            wsService={wsServiceInstance}
             onDeleteMessage={handleDeleteChatMessage}
             onMuteUser={handleMuteChatUser}
             onBanUser={handleBanChatUser}

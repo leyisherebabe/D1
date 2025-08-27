@@ -47,4 +47,17 @@ export class WebSocketService {
       console.warn('WebSocket not open. User info not sent.');
     }
   }
+  
+  sendAdminAction(action: string, targetUserId?: string, targetUsername?: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        type: 'admin_action',
+        action: action,
+        targetUserId: targetUserId,
+        targetUsername: targetUsername
+      }));
+    } else {
+      console.warn('WebSocket not open. Admin action not sent.');
+    }
+  }
 }
