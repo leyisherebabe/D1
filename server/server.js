@@ -27,13 +27,29 @@ wss.on('connection', ws => {
 
   ws.on('message', message => {
     console.log('Received message:', message.toString());
-    // Gérer les messages entrants (par exemple, messages de chat)
-    // Diffuser le message à tous les clients connectés
-    wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(message.toString());
+    
+    try {
+      // Parser le message JSON entrant
+      const parsedMessage = JSON.parse(message.toString());
+      
+      // Vérifier si c'est un message de chat
+      if (parsedMessage.type === 'chat_message') {
+        console.log('Broadcasting chat message from:', parsedMessage.message?.username);
+        
+        // Re-diffuser le message de chat à tous les clients connectés
+        wss.clients.forEach(client => {
+          if (client.readyState === WebSocket.OPEN) {
+            client.send(JSON.stringify(parsedMessage));
+          }
+        });
+      } else {
+        // Gérer d'autres types de messages si nécessaire
+        console.log('Received non-chat message type:', parsedMessage.type);
       }
-    });
+    } catch (error) {
+      // Le message n'est pas un JSON valide, l'ignorer ou le logger
+      console.warn('Received invalid JSON message:', error.message);
+    }
   });
 
   ws.on('close', () => {
