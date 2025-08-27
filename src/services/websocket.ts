@@ -27,9 +27,15 @@ export class WebSocketService {
   
   sendMessage(chatMessage: ChatMessage) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      // Convertir la date en string pour la sérialisation JSON
+      const messageToSend = {
+        ...chatMessage,
+        timestamp: chatMessage.timestamp instanceof Date ? chatMessage.timestamp.toISOString() : chatMessage.timestamp
+      };
+      
       this.ws.send(JSON.stringify({
         type: 'chat_message',
-        message: chatMessage
+        message: messageToSend
       }));
     } else {
       console.warn('WebSocket not open. Message not sent.');

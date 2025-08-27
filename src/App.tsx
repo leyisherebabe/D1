@@ -93,7 +93,11 @@ function App() {
           setAllConnectedUsers(users);
         } else if (data.type === 'chat_message' && data.message) {
           // Ajouter le message de chat reçu à l'état global
-          setAllChatMessages(prev => [...prev.slice(-49), data.message]);
+          const messageWithDateObject = {
+            ...data.message,
+            timestamp: new Date(data.message.timestamp)
+          };
+          setAllChatMessages(prev => [...prev.slice(-49), messageWithDateObject]);
         } else if (data.type === 'banned') {
           // L'utilisateur a été banni
           alert('⚠️ ' + data.message);

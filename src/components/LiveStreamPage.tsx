@@ -200,7 +200,7 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
         id: Date.now().toString(),
         username: username,
         message: message.trim(),
-        timestamp: new Date(),
+        timestamp: new Date().toISOString(),
         role: userRole,
         color: userRole === 'admin' ? '#ef4444' : userRole === 'moderator' ? '#8b5cf6' : '#3b82f6',
         ip: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`
