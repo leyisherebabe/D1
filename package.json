@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "dev:server": "node server/server.js",
+    "dev:server": "node server/server.js",
     "dev:full": "concurrently \"npm run dev:server\" \"npm run dev\" --names \"WebSocket,Vite\" --prefix-colors \"cyan,magenta\"",
     "build": "tsc && vite build",
     "lint": "eslint .",
