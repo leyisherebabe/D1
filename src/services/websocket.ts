@@ -26,19 +26,28 @@ export class WebSocketService {
   }
   
   sendMessage(chatMessage: ChatMessage) {
-    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-      // Convertir la date en string pour la sérialisation JSON
-      const messageToSend = {
-        ...chatMessage,
-        timestamp: chatMessage.timestamp instanceof Date ? chatMessage.timestamp.toISOString() : chatMessage.timestamp
-      };
-      
-      this.ws.send(JSON.stringify({
-        type: 'chat_message',
-        message: messageToSend
-      }));
-    } else {
-      console.warn('WebSocket not open. Message not sent.');
+    try {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        // Convertir la date en string pour la sérialisation JSON
+        const messageToSend = {
+          ...chatMessage,
+          timestamp: chatMessage.timestamp instanceof Date ? chatMessage.timestamp.toISOString() : chatMessage.timestamp
+        };
+        
+        console.log('Sending WebSocket message:', messageToSend);
+        
+        this.ws.send(JSON.stringify({
+          type: 'chat_message',
+          message: messageToSend
+        }));
+        
+        console.log('WebSocket message sent successfully');
+      } else {
+        console.warn('WebSocket not open. Message not sent. ReadyState:', this.ws?.readyState);
+      }
+    } catch (error) {
+      console.error('Error sending WebSocket message:', error);
+      throw error; // Re-throw pour que l'appelant puisse gérer l'erreur
     }
   }
   

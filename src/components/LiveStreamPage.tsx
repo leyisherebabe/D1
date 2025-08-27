@@ -74,15 +74,84 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
 
   // Messages automatiques du système
   useEffect(() => {
-    const interval = setInterval(() => {
-      setViewers(prev => Math.max(50, prev + Math.floor(Math.random() * 20) - 10));
-      
-      if (Math.random() > 0.85) {
-        const randomUsernames = [
-          'Anonyme_' + Math.floor(Math.random() * 999),
-          'Ghost_' + Math.floor(Math.random() * 999),
-          'Viewer_' + Math.floor(Math.random() * 999)
-        ];
+    try {
+      const interval = setInterval(() => {
+        try {
+          setViewers(prev => Math.max(50, prev + Math.floor(Math.random() * 20) - 10));
+          
+          if (Math.random() > 0.85) {
+            const randomUsernames = [
+              'Anonyme_' + Math.floor(Math.random() * 999),
+              'Ghost_' + Math.floor(Math.random() * 999),
+              'Viewer_' + Math.floor(Math.random() * 999)
+            ];
+            
+            const randomMessages = [
+              'Excellent stream ! 👏',
+              'Merci pour le contenu de qualité',
+              'Super travail ! 🔥',
+              'J\'adore cette communauté',
+              'Bravo pour l\'anonymat',
+              'Qualité parfaite !',
+              'Continue comme ça ! 💪'
+            ];
+            
+            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#84cc16'];
+            
+            const newMessage: ChatMessageType = {
+              id: Date.now().toString(),
+              username: randomUsernames[Math.floor(Math.random() * randomUsernames.length)],
+              message: randomMessages[Math.floor(Math.random() * randomMessages.length)],
+              timestamp: new Date(),
+              role: 'viewer',
+              color: colors[Math.floor(Math.random() * colors.length)],
+              ip: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`
+            };
+            
+            onAddMessage(newMessage);
+          }
+        } catch (error) {
+          console.error('Error in automatic message generation:', error);
+        }
+      }, 5000);
+
+      return () => clearInterval(interval);
+    } catch (error) {
+      console.error('Error setting up automatic messages:', error);
+    }
+  }, [onAddMessage]);
+
+  // Effet pour faire défiler le chat vers le bas
+  useEffect(() => {
+    try {
+      if (chatRef.current) {
+        chatRef.current.scrollTop = chatRef.current.scrollHeight;
+      }
+    } catch (error) {
+      console.error('Error scrolling chat:', error);
+    }
+  }, [allChatMessages]);
+
+  // Gestion des erreurs React avec un Error Boundary simple
+  useEffect(() => {
+    const handleError = (event: ErrorEvent) => {
+      console.error('Global error caught:', event.error);
+      event.preventDefault();
+    };
+
+    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
+      console.error('Unhandled promise rejection:', event.reason);
+      event.preventDefault();
+    };
+
+    window.addEventListener('error', handleError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('error', handleError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
         
         const randomMessages = [
           'Excellent stream ! 👏',
@@ -195,25 +264,125 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
   };
 
   const sendMessage = () => {
-    if (message.trim() && isUsernameSet && wsService) {
+    if (message.trim() && isUsernameSet) {
+      console.log('Sending message:', message);
+      console.log('Username:', username);
+      console.log('WebSocket service:', wsService);
+      
       const newMessage: ChatMessageType = {
         id: Date.now().toString(),
         username: username,
         message: message.trim(),
-        timestamp: new Date().toISOString(),
+        timestamp: new Date(),
         role: userRole,
         color: userRole === 'admin' ? '#ef4444' : userRole === 'moderator' ? '#8b5cf6' : '#3b82f6',
         ip: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`
       };
       
-      // Envoyer via WebSocket
-      wsService.sendMessage(newMessage);
+      console.log('New message object:', newMessage);
       
-      // Ajouter localement
-      onAddMessage(newMessage);
-      
-      setMessage('');
+      try {
+        // Ajouter localement d'abord
+        onAddMessage(newMessage);
+        
+        // Envoyer via WebSocket si disponible
+        if (wsService && wsService.ws && wsService.ws.readyState === WebSocket.OPEN) {
+          wsService.sendMessage(newMessage);
+          console.log('Message sent via WebSocket');
+        } else {
+          console.warn('WebSocket not available, message added locally only');
+        }
+        
+        setMessage('');
+        console.log('Message sent successfully');
+      } catch (error) {
+        console.error('Error sending message:', error);
+        // Ne pas vider le message en cas d'erreur
+      }
+    } else {
+      console.log('Cannot send message:', {
+        messageEmpty: !message.trim(),
+        usernameNotSet: !isUsernameSet,
+        wsServiceMissing: !wsService
+      });
     }
+  };
+
+  // Fonction pour gérer les erreurs React
+  const handleError = (error: Error, errorInfo: any) => {
+    console.error('React Error:', error);
+    console.error('Error Info:', errorInfo);
+  };
+
+  // Wrapper pour les fonctions qui peuvent causer des erreurs
+  const safeExecute = (fn: () => void, errorMessage: string) => {
+    try {
+      fn();
+    } catch (error) {
+      console.error(errorMessage, error);
+    }
+  };
+
+  const togglePlay = () => {
+    safeExecute(() => {
+      if (videoRef.current) {
+        if (isPlaying) {
+          videoRef.current.pause();
+        } else {
+          videoRef.current.play();
+        }
+        setIsPlaying(!isPlaying);
+      }
+    }, 'Error toggling play state');
+  };
+
+  const toggleMute = () => {
+    safeExecute(() => {
+      if (videoRef.current) {
+        videoRef.current.muted = !isMuted;
+        setIsMuted(!isMuted);
+      }
+    }, 'Error toggling mute state');
+  };
+
+  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    safeExecute(() => {
+      const newVolume = parseInt(e.target.value);
+      setVolume(newVolume);
+      if (videoRef.current) {
+        videoRef.current.volume = newVolume / 100;
+      }
+    }, 'Error changing volume');
+  };
+
+  const setUserUsername = () => {
+    safeExecute(() => {
+      if (username.trim()) {
+        if (checkModeratorCredentials(username)) {
+          setShowModPassword(true);
+          return;
+        }
+      
+        setIsUsernameSet(true);
+        onUsernameSet(username);
+        
+        // Envoyer les informations utilisateur au serveur
+        if (wsService && wsService.ws && wsService.ws.readyState === WebSocket.OPEN) {
+          wsService.sendUserInfo(username, 'live');
+        }
+        
+        const welcomeMessage: ChatMessageType = {
+          id: Date.now().toString(),
+          username: 'StreamBot',
+          message: `👋 Bienvenue ${username} dans le chat !`,
+          timestamp: new Date(),
+          role: 'admin',
+          isSystem: true,
+          color: '#ef4444'
+        };
+        onAddMessage(welcomeMessage);
+      }
+    }, 'Error setting username');
   };
 
   const togglePlay = () => {

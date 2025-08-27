@@ -74,44 +74,66 @@ function App() {
   // Effet pour la logique WebSocket des utilisateurs actifs
   // Ce useEffect est maintenant au niveau supérieur et gère la connexion WebSocket
   useEffect(() => {
-    const wsService = new WebSocketService();
-    wsService.connect();
-    setWsServiceInstance(wsService);
+    try {
+      const wsService = new WebSocketService();
+      wsService.connect();
+      setWsServiceInstance(wsService);
 
-    if (wsService.ws) {
-      wsService.ws.onmessage = (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'user_count') {
-          setActiveUsers(data.count);
-        } else if (data.type === 'user_list') {
-          // Convertir les dates ISO en objets Date
-          const users = data.users.map((user: any) => ({
-            ...user,
-            connectTime: new Date(user.connectTime),
-            lastActivity: new Date(user.lastActivity)
-          }));
-          setAllConnectedUsers(users);
-        } else if (data.type === 'chat_message' && data.message) {
-          // Ajouter le message de chat reçu à l'état global
-          const messageWithDateObject = {
-            ...data.message,
-            timestamp: new Date(data.message.timestamp)
-          };
-          setAllChatMessages(prev => [...prev.slice(-49), messageWithDateObject]);
-        } else if (data.type === 'banned') {
-          // L'utilisateur a été banni
-          alert('⚠️ ' + data.message);
-          // Déconnecter l'utilisateur
-          handleLogout();
+      if (wsService.ws) {
+        wsService.ws.onmessage = (event) => {
+          try {
+            console.log('Received WebSocket message:', event.data);
+            const data = JSON.parse(event.data);
+            
+            if (data.type === 'user_count') {
+              setActiveUsers(data.count);
+            } else if (data.type === 'user_list') {
+              // Convertir les dates ISO en objets Date
+              const users = data.users.map((user: any) => ({
+                ...user,
+                connectTime: new Date(user.connectTime),
+                lastActivity: new Date(user.lastActivity)
+              }));
+              setAllConnectedUsers(users);
+            } else if (data.type === 'chat_message' && data.message) {
+              // Ajouter le message de chat reçu à l'état global
+              const messageWithDateObject = {
+                ...data.message,
+                timestamp: new Date(data.message.timestamp)
+              };
+              setAllChatMessages(prev => [...prev.slice(-49), messageWithDateObject]);
+            } else if (data.type === 'banned') {
+              // L'utilisateur a été banni
+              alert('⚠️ ' + data.message);
+              // Déconnecter l'utilisateur
+              handleLogout();
+            }
+          } catch (error) {
+            console.error('Error processing WebSocket message:', error);
+          }
+        };
+        
+        wsService.ws.onerror = (error) => {
+          console.error('WebSocket error:', error);
+        };
+        
+        wsService.ws.onclose = (event) => {
+          console.log('WebSocket closed:', event.code, event.reason);
+        };
+      }
+
+      return () => {
+        try {
+          if (wsService.ws) {
+            wsService.ws.close();
+          }
+        } catch (error) {
+          console.error('Error closing WebSocket:', error);
         }
       };
+    } catch (error) {
+      console.error('Error initializing WebSocket:', error);
     }
-
-    return () => {
-      if (wsService.ws) {
-        wsService.ws.close();
-      }
-    };
   }, []); // Le tableau de dépendances vide assure qu'il ne s'exécute qu'une fois au montage
 
   // Effet pour envoyer les mises à jour de page au serveur
