@@ -2,9 +2,13 @@ export class WebSocketService {
   public ws: WebSocket | null = null; // Rendre ws public pour y accéder depuis App.tsx
   
   connect() {
-    // REMPLACEZ PAR VOTRE SERVEUR WEBSOCKET
-    // Pour le développement local, utilisez ws://localhost:3000/ws
-    this.ws = new WebSocket('ws://localhost:3000/ws');
+    // Construire l'URL WebSocket dynamiquement pour l'environnement webcontainer
+    const host = window.location.host;
+    const wsUrl = host.includes('webcontainer-api.io') 
+      ? `ws://${host.replace('-5173-', '-3000-')}/ws`
+      : 'ws://localhost:3000/ws';
+    
+    this.ws = new WebSocket(wsUrl);
     
     this.ws.onopen = () => {
       console.log('WebSocket connected');
