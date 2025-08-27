@@ -1,4 +1,3 @@
-import { WebSocketService } from './services/websocket';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Play, 
@@ -24,8 +23,33 @@ import ReportModal from './modals/ReportModal';
 import { ChatMessage as ChatMessageType, Report } from '../types';
 import { MODERATOR_PASSWORDS } from '../utils/constants';
 import { formatTime, checkModeratorCredentials } from '../utils/helpers';
+import { WebSocketService } from './services/websocket';
 
-const LiveStreamPage = () => {
+interface LiveStreamPageProps {
+  allChatMessages: ChatMessageType[];
+  wsService: WebSocketService | null;
+  onDeleteMessage: (messageId: string) => void;
+  onMuteUser: (username: string, moderatorUsername: string) => void;
+  onBanUser: (username: string, moderatorUsername: string) => void;
+  onReportMessage: (report: Report) => void;
+  onAddMessage: (message: ChatMessageType) => void;
+}
+
+const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
+  allChatMessages,
+  wsService,
+  onDeleteMessage,
+  onMuteUser,
+  onBanUser,
+  onReportMessage,
+  onAddMessage
+}) => {
+  const [currentStream, setCurrentStream] = useState<any>(null);
+  const [streamStats, setStreamStats] = useState({
+    viewers: 0,
+    likes: 0,
+    duration: 0
+  });
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(50);
@@ -41,34 +65,6 @@ const LiveStreamPage = () => {
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportingMessage, setReportingMessage] = useState<ChatMessageType | null>(null);
-
-  const [chatMessages, setChatMessages] = useState<ChatMessageType[]>([
-    {
-      id: '1',
-      username: 'StreamBot',
-      message: '🎉 Bienvenue dans le stream ! Respectez les règles du chat.',
-      timestamp: new Date(Date.now() - 600000),
-      role: 'admin',
-      isSystem: true,
-      color: '#ef4444'
-    },
-    {
-      id: '2',
-      username: 'Anonyme_42',
-      message: 'Super stream ! La qualité est parfaite 🔥',
-      timestamp: new Date(Date.now() - 480000),
-      role: 'viewer',
-      color: '#3b82f6'
-    },
-    {
-      id: '3',
-      username: 'Mod_Sarah',
-      message: 'N\'oubliez pas de suivre les règles ! 🛡️',
-      timestamp: new Date(Date.now() - 240000),
-      role: 'moderator',
-      color: '#8b5cf6'
-    }
-  ]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
@@ -108,7 +104,7 @@ const LiveStreamPage = () => {
           ip: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`
         };
         
-        setChatMessages(prev => [...prev.slice(-49), newMessage]);
+        onAddMessage(newMessage);
       }
     }, 5000);
 
@@ -119,7 +115,7 @@ const LiveStreamPage = () => {
     if (chatRef.current) {
       chatRef.current.scrollTop = chatRef.current.scrollHeight;
     }
-  }, [chatMessages]);
+  }, [allChatMessages]);
 
   const verifyModPassword = () => {
     const lowerUsername = username.toLowerCase();
@@ -162,7 +158,7 @@ const LiveStreamPage = () => {
         isSystem: true,
         color: '#ef4444'
       };
-      setChatMessages(prev => [...prev.slice(-49), welcomeMessage]);
+      onAddMessage(welcomeMessage);
     }
   };
 
@@ -179,12 +175,12 @@ const LiveStreamPage = () => {
         isSystem: true,
         color: '#ef4444'
       };
-      setChatMessages(prev => [...prev.slice(-49), welcomeMessage]);
+      onAddMessage(welcomeMessage);
     }
   };
 
   const sendMessage = () => {
-    if (message.trim() && isUsernameSet) {
+    if (message.trim() && isUsernameSet && wsService) {
       const newMessage: ChatMessageType = {
         id: Date.now().toString(),
         username: username,
@@ -195,46 +191,14 @@ const LiveStreamPage = () => {
         ip: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`
       };
       
-      setChatMessages(prev => [...prev.slice(-49), newMessage]);
+      // Envoyer via WebSocket
+      wsService.sendMessage(newMessage);
+      
+      // Ajouter localement
+      onAddMessage(newMessage);
+      
       setMessage('');
     }
-  };
-
-  const deleteMessage = (messageId: string) => {
-    setChatMessages(prev => prev.filter(msg => msg.id !== messageId));
-  };
-
-  const muteUser = (targetUsername: string) => {
-    const systemMessage: ChatMessageType = {
-      id: Date.now().toString(),
-      username: 'StreamBot',
-      message: `🔇 ${targetUsername} a été mute par ${username}`,
-      timestamp: new Date(),
-      role: 'admin',
-      isSystem: true,
-      color: '#ef4444'
-    };
-    setChatMessages(prev => [...prev.slice(-49), systemMessage]);
-  };
-
-  const banUser = (targetUsername: string) => {
-    setChatMessages(prev => prev.filter(msg => msg.username !== targetUsername));
-    const systemMessage: ChatMessageType = {
-      id: Date.now().toString(),
-      username: 'StreamBot',
-      message: `🚫 ${targetUsername} a été banni par ${username}`,
-      timestamp: new Date(),
-      role: 'admin',
-      isSystem: true,
-      color: '#ef4444'
-    };
-    setChatMessages(prev => [...prev.slice(-49), systemMessage]);
-  };
-
-  const handleReportSubmit = (report: Report) => {
-    const existingReports = JSON.parse(localStorage.getItem('chatReports') || '[]');
-    localStorage.setItem('chatReports', JSON.stringify([...existingReports, report]));
-    alert('Signalement envoyé avec succès');
   };
 
   const togglePlay = () => {
@@ -361,7 +325,7 @@ const LiveStreamPage = () => {
         <ReportModal
           message={reportingMessage}
           reporterUsername={username}
-          onSubmit={handleReportSubmit}
+          onSubmit={onReportMessage}
           onClose={() => {
             setShowReportModal(false);
             setReportingMessage(null);
@@ -530,7 +494,7 @@ const LiveStreamPage = () => {
                 <MessageCircle className="h-6 w-6 mr-3 text-purple-400" />
                 Chat en Direct
                 <span className="ml-auto text-sm text-slate-400 bg-slate-800/50 px-3 py-1 rounded-full">
-                  {chatMessages.length} messages
+                  {allChatMessages.length} messages
                 </span>
               </h3>
               
@@ -538,15 +502,15 @@ const LiveStreamPage = () => {
                 ref={chatRef}
                 className="space-y-3 max-h-96 overflow-y-auto mb-6 pr-2 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800"
               >
-                {chatMessages.map((msg) => (
+                {allChatMessages.map((msg) => (
                   <ChatMessage
                     key={msg.id}
                     message={msg}
                     currentUsername={username}
                     userRole={userRole}
-                    onDeleteMessage={deleteMessage}
-                    onMuteUser={muteUser}
-                    onBanUser={banUser}
+                    onDeleteMessage={onDeleteMessage}
+                    onMuteUser={(targetUsername) => onMuteUser(targetUsername, username)}
+                    onBanUser={(targetUsername) => onBanUser(targetUsername, username)}
                     onReportMessage={(message) => {
                       setReportingMessage(message);
                       setShowReportModal(true);
