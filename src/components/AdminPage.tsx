@@ -16,14 +16,26 @@ import {
   Save,
   X,
   Crown,
-  Sparkles
+  Sparkles,
+  VolumeX
 } from 'lucide-react';
 import { ChatMessage, ConnectedUser, StreamLog, Report, PopupAnnouncement } from '../types';
 
-const AdminPage = () => {
+interface AdminPageProps {
+  allChatMessages: ChatMessage[];
+  onDeleteMessage: (messageId: string) => void;
+  onMuteUser: (username: string, moderatorUsername: string) => void;
+  onBanUser: (username: string, moderatorUsername: string) => void;
+}
+
+const AdminPage: React.FC<AdminPageProps> = ({
+  allChatMessages,
+  onDeleteMessage,
+  onMuteUser,
+  onBanUser
+}) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'chat' | 'logs' | 'reports' | 'announcements'>('overview');
   const [connectedUsers, setConnectedUsers] = useState<ConnectedUser[]>([]);
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [streamLogs, setStreamLogs] = useState<StreamLog[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [announcements, setAnnouncements] = useState<PopupAnnouncement[]>([]);
@@ -147,7 +159,7 @@ const AdminPage = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
           { label: 'Utilisateurs connectés', value: connectedUsers.length, icon: Users, color: 'from-blue-500 to-cyan-500' },
-          { label: 'Messages chat', value: chatMessages.length, icon: MessageCircle, color: 'from-green-500 to-emerald-500' },
+          { label: 'Messages chat', value: allChatMessages.length, icon: MessageCircle, color: 'from-green-500 to-emerald-500' },
           { label: 'Signalements', value: reports.filter(r => r.status === 'pending').length, icon: AlertTriangle, color: 'from-orange-500 to-red-500' },
           { label: 'Logs système', value: streamLogs.length, icon: Activity, color: 'from-purple-500 to-pink-500' }
         ].map((stat, index) => (
@@ -177,6 +189,94 @@ const AdminPage = () => {
             </div>
           ))}
         </div>
+      </div>
+    </div>
+  );
+
+  const renderChat = () => (
+    <div className="glass-dark border border-slate-700/50 rounded-2xl p-8">
+      <h3 className="text-2xl font-semibold text-white mb-6">Gestion du Chat</h3>
+      <div className="mb-6">
+        <div className="flex items-center justify-between text-sm text-slate-400 mb-4">
+          <span>Total des messages: {allChatMessages.length}</span>
+          <span>Messages récents: {allChatMessages.filter(msg => Date.now() - msg.timestamp.getTime() < 3600000).length}</span>
+        </div>
+      </div>
+      
+      <div className="space-y-4 max-h-96 overflow-y-auto pr-2 scrollbar-thin scrollbar-thumb-slate-600 scrollbar-track-slate-800">
+        {allChatMessages.slice().reverse().map((message) => (
+          <div key={message.id} className={`p-4 rounded-xl border transition-all hover:bg-slate-800/30 ${
+            message.isSystem ? 'bg-red-500/10 border-red-500/30' : 'bg-slate-800/20 border-slate-700/50'
+          }`}>
+            <div className="flex items-start justify-between mb-2">
+              <div className="flex items-center space-x-2">
+                <span 
+                  className="font-medium text-sm"
+                  style={{ color: message.color || '#64748b' }}
+                >
+                  {message.role === 'admin' && '👑'} 
+                  {message.role === 'moderator' && '🛡️'} 
+                  {message.username}
+                </span>
+                {message.role === 'moderator' && (
+                  <span className="bg-purple-500/20 text-purple-400 text-xs px-2 py-1 rounded-full border border-purple-500/30">
+                    MOD
+                  </span>
+                )}
+                {message.role === 'admin' && (
+                  <span className="bg-red-500/20 text-red-400 text-xs px-2 py-1 rounded-full border border-red-500/30">
+                    ADMIN
+                  </span>
+                )}
+                {message.ip && (
+                  <span className="text-xs text-slate-500 font-mono bg-slate-800/50 px-2 py-1 rounded">
+                    {message.ip}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-xs text-slate-500 font-mono">
+                  {message.timestamp.toLocaleTimeString('fr-FR')}
+                </span>
+                {!message.isSystem && (
+                  <div className="flex items-center space-x-1">
+                    <button
+                      onClick={() => onDeleteMessage(message.id)}
+                      className="text-red-400 hover:text-red-300 p-1.5 rounded-lg hover:bg-red-500/10 transition-all transform hover:scale-110"
+                      title="Supprimer le message"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={() => onMuteUser(message.username, 'Admin')}
+                      className="text-orange-400 hover:text-orange-300 p-1.5 rounded-lg hover:bg-orange-500/10 transition-all transform hover:scale-110"
+                      title="Mute l'utilisateur"
+                    >
+                      <VolumeX className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={() => onBanUser(message.username, 'Admin')}
+                      className="text-red-400 hover:text-red-300 p-1.5 rounded-lg hover:bg-red-500/10 transition-all transform hover:scale-110"
+                      title="Bannir l'utilisateur"
+                    >
+                      <Ban className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+            <p className="text-sm text-slate-200 break-words leading-relaxed">
+              {message.message}
+            </p>
+          </div>
+        ))}
+        
+        {allChatMessages.length === 0 && (
+          <div className="text-center py-12 text-slate-500">
+            <MessageCircle className="h-12 w-12 mx-auto mb-4" />
+            <p>Aucun message dans le chat pour le moment</p>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -421,6 +521,7 @@ const AdminPage = () => {
             {[
               { id: 'overview', label: 'Vue d\'ensemble', icon: Activity },
               { id: 'users', label: 'Utilisateurs', icon: Users },
+              { id: 'chat', label: 'Chat', icon: MessageCircle },
               { id: 'reports', label: 'Signalements', icon: AlertTriangle },
               { id: 'announcements', label: 'Annonces', icon: Sparkles }
             ].map((tab) => (
@@ -444,6 +545,7 @@ const AdminPage = () => {
         <div className="animate-in fade-in-0 duration-500">
           {activeTab === 'overview' && renderOverview()}
           {activeTab === 'users' && renderUsers()}
+          {activeTab === 'chat' && renderChat()}
           {activeTab === 'reports' && renderReports()}
           {activeTab === 'announcements' && renderAnnouncements()}
         </div>

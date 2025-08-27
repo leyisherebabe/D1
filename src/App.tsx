@@ -576,7 +576,7 @@ function App() {
           />
         )}
         {currentPage === 'admin' && (
-          <AdminPage 
+          <AdminPage
             allChatMessages={allChatMessages}
             onDeleteMessage={handleDeleteChatMessage}
             onMuteUser={handleMuteChatUser}
