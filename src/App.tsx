@@ -8,7 +8,7 @@ import PopupAnnouncement from './components/modals/PopupAnnouncement';
 import DMCAPage from './components/DMCAPage';
 import LegalPage from './components/LegalPage';
 import { ENCRYPTION_KEY, ADMIN_ACCESS_CODE } from './utils/constants';
-import { PopupAnnouncement as PopupAnnouncementType } from './types';
+import { PopupAnnouncement as PopupAnnouncementType, ChatMessage, Report } from './types';
 import { WebSocketService } from './services/websocket'; // Importez le service WebSocket
 
 type Page = 'home' | 'streaming' | 'admin' | 'streams' | 'live' | 'dmca' | 'legal';
@@ -26,6 +26,34 @@ function App() {
   const [showPopup, setShowPopup] = useState(false);
   const [currentPopup, setCurrentPopup] = useState<PopupAnnouncementType | null>(null);
   const [activeUsers, setActiveUsers] = useState(0); // État pour les utilisateurs actifs
+  const [allChatMessages, setAllChatMessages] = useState<ChatMessage[]>([
+    {
+      id: '1',
+      username: 'StreamBot',
+      message: '🎉 Bienvenue dans le stream ! Respectez les règles du chat.',
+      timestamp: new Date(Date.now() - 600000),
+      role: 'admin',
+      isSystem: true,
+      color: '#ef4444'
+    },
+    {
+      id: '2',
+      username: 'Anonyme_42',
+      message: 'Super stream ! La qualité est parfaite 🔥',
+      timestamp: new Date(Date.now() - 480000),
+      role: 'viewer',
+      color: '#3b82f6'
+    },
+    {
+      id: '3',
+      username: 'Mod_Sarah',
+      message: 'N\'oubliez pas de suivre les règles ! 🛡️',
+      timestamp: new Date(Date.now() - 240000),
+      role: 'moderator',
+      color: '#8b5cf6'
+    }
+  ]);
+  const [wsServiceInstance, setWsServiceInstance] = useState<WebSocketService | null>(null);
 
   // Effet pour l'authentification initiale
   useEffect(() => {
@@ -44,12 +72,16 @@ function App() {
   useEffect(() => {
     const wsService = new WebSocketService();
     wsService.connect();
+    setWsServiceInstance(wsService);
 
     if (wsService.ws) {
       wsService.ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         if (data.type === 'user_count') {
           setActiveUsers(data.count);
+        } else if (data.type === 'chat_message' && data.message) {
+          // Ajouter le message de chat reçu à l'état global
+          setAllChatMessages(prev => [...prev.slice(-49), data.message]);
         }
       };
     }
@@ -78,6 +110,50 @@ function App() {
     
     return () => clearInterval(interval);
   }, [showPopup]);
+
+  // Fonctions de modération centralisées
+  const handleDeleteChatMessage = (messageId: string) => {
+    setAllChatMessages(prev => prev.filter(msg => msg.id !== messageId));
+  };
+
+  const handleMuteChatUser = (targetUsername: string, moderatorUsername: string) => {
+    const systemMessage: ChatMessage = {
+      id: Date.now().toString(),
+      username: 'StreamBot',
+      message: `🔇 ${targetUsername} a été mute par ${moderatorUsername}`,
+      timestamp: new Date(),
+      role: 'admin',
+      isSystem: true,
+      color: '#ef4444'
+    };
+    setAllChatMessages(prev => [...prev.slice(-49), systemMessage]);
+  };
+
+  const handleBanChatUser = (targetUsername: string, moderatorUsername: string) => {
+    // Supprimer tous les messages de l'utilisateur banni
+    setAllChatMessages(prev => prev.filter(msg => msg.username !== targetUsername));
+    
+    // Ajouter un message système
+    const systemMessage: ChatMessage = {
+      id: Date.now().toString(),
+      username: 'StreamBot',
+      message: `🚫 ${targetUsername} a été banni par ${moderatorUsername}`,
+      timestamp: new Date(),
+      role: 'admin',
+      isSystem: true,
+      color: '#ef4444'
+    };
+    setAllChatMessages(prev => [...prev.slice(-49), systemMessage]);
+  };
+
+  const handleReportMessage = (report: Report) => {
+    const existingReports = JSON.parse(localStorage.getItem('chatReports') || '[]');
+    localStorage.setItem('chatReports', JSON.stringify([...existingReports, report]));
+  };
+
+  const addChatMessage = (message: ChatMessage) => {
+    setAllChatMessages(prev => [...prev.slice(-49), message]);
+  };
 
   // Effet pour la détection de la combinaison de touches secrète (Ctrl+Shift+A)
   useEffect(() => {
@@ -477,10 +553,27 @@ function App() {
 
       {/* Contenu */}
       <main className="animate-in fade-in-0 duration-500">
-        {currentPage === 'home' && <HomePage />}
+        {currentPage === 'home' && <HomePage activeUsers={activeUsers} />}
         {currentPage === 'streams' && <StreamsListPage />}
-        {currentPage === 'live' && <LiveStreamPage />}
-        {currentPage === 'admin' && <AdminPage />}
+        {currentPage === 'live' && (
+          <LiveStreamPage 
+            allChatMessages={allChatMessages}
+            wsService={wsServiceInstance}
+            onDeleteMessage={handleDeleteChatMessage}
+            onMuteUser={handleMuteChatUser}
+            onBanUser={handleBanChatUser}
+            onReportMessage={handleReportMessage}
+            onAddMessage={addChatMessage}
+          />
+        )}
+        {currentPage === 'admin' && (
+          <AdminPage 
+            allChatMessages={allChatMessages}
+            onDeleteMessage={handleDeleteChatMessage}
+            onMuteUser={handleMuteChatUser}
+            onBanUser={handleBanChatUser}
+          />
+        )}
         {currentPage === 'dmca' && <DMCAPage />}
         {currentPage === 'legal' && <LegalPage />}
       </main>
