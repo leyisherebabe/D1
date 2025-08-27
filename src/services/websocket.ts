@@ -1,3 +1,5 @@
+import { ChatMessage } from '../types';
+
 export class WebSocketService {
   public ws: WebSocket | null = null; // Rendre ws public pour y accéder depuis App.tsx
   
@@ -23,13 +25,11 @@ export class WebSocketService {
     };
   }
   
-  sendMessage(message: string, username: string) {
+  sendMessage(chatMessage: ChatMessage) {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({
         type: 'chat_message',
-        message,
-        username,
-        timestamp: new Date()
+        message: chatMessage
       }));
     } else {
       console.warn('WebSocket not open. Message not sent.');
