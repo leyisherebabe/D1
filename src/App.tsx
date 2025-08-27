@@ -155,6 +155,15 @@ function App() {
     setAllChatMessages(prev => [...prev.slice(-49), message]);
   };
 
+  const handleClosePopup = (announcementId: string) => {
+    const savedPopups = JSON.parse(localStorage.getItem('popupAnnouncements') || '[]');
+    const updatedPopups = savedPopups.map((popup: PopupAnnouncementType) => 
+      popup.id === announcementId ? { ...popup, isActive: false } : popup
+    );
+    localStorage.setItem('popupAnnouncements', JSON.stringify(updatedPopups));
+    setShowPopup(false);
+    setCurrentPopup(null);
+  };
   // Effet pour la détection de la combinaison de touches secrète (Ctrl+Shift+A)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -470,7 +479,7 @@ function App() {
       {showPopup && currentPopup && (
         <PopupAnnouncement
           announcement={currentPopup}
-          onClose={() => setShowPopup(false)}
+          onClose={() => handleClosePopup(currentPopup.id)}
         />
       )}
 
