@@ -8,7 +8,7 @@ import PopupAnnouncement from './components/modals/PopupAnnouncement';
 import DMCAPage from './components/DMCAPage';
 import LegalPage from './components/LegalPage';
 import { ENCRYPTION_KEY, ADMIN_ACCESS_CODE } from './utils/constants';
-import { PopupAnnouncement as PopupAnnouncementType, ChatMessage, Report } from './types';
+import { PopupAnnouncement as PopupAnnouncementType, ChatMessage, Report, ConnectedUser } from './types';
 import { WebSocketService } from './services/websocket'; // Importez le service WebSocket
 
 type Page = 'home' | 'streaming' | 'admin' | 'streams' | 'live' | 'dmca' | 'legal';
@@ -26,6 +26,7 @@ function App() {
   const [showPopup, setShowPopup] = useState(false);
   const [currentPopup, setCurrentPopup] = useState<PopupAnnouncementType | null>(null);
   const [activeUsers, setActiveUsers] = useState(0); // État pour les utilisateurs actifs
+  const [allConnectedUsers, setAllConnectedUsers] = useState<ConnectedUser[]>([]);
   const [allChatMessages, setAllChatMessages] = useState<ChatMessage[]>([
     {
       id: '1',
@@ -55,6 +56,9 @@ function App() {
   ]);
   const [wsServiceInstance, setWsServiceInstance] = useState<WebSocketService | null>(null);
 
+  // État pour stocker le nom d'utilisateur actuel (pour les mises à jour de page)
+  const [currentUsername, setCurrentUsername] = useState<string>('');
+
   // Effet pour l'authentification initiale
   useEffect(() => {
     const authenticated = sessionStorage.getItem('authenticated');
@@ -79,6 +83,14 @@ function App() {
         const data = JSON.parse(event.data);
         if (data.type === 'user_count') {
           setActiveUsers(data.count);
+        } else if (data.type === 'user_list') {
+          // Convertir les dates ISO en objets Date
+          const users = data.users.map((user: any) => ({
+            ...user,
+            connectTime: new Date(user.connectTime),
+            lastActivity: new Date(user.lastActivity)
+          }));
+          setAllConnectedUsers(users);
         } else if (data.type === 'chat_message' && data.message) {
           // Ajouter le message de chat reçu à l'état global
           setAllChatMessages(prev => [...prev.slice(-49), data.message]);
@@ -92,6 +104,18 @@ function App() {
       }
     };
   }, []); // Le tableau de dépendances vide assure qu'il ne s'exécute qu'une fois au montage
+
+  // Effet pour envoyer les mises à jour de page au serveur
+  useEffect(() => {
+    if (wsServiceInstance && currentUsername && isAuthenticated) {
+      wsServiceInstance.sendUserInfo(currentUsername, currentPage);
+    }
+  }, [currentPage, wsServiceInstance, currentUsername, isAuthenticated]);
+
+  // Fonction pour mettre à jour le nom d'utilisateur actuel
+  const updateCurrentUsername = (username: string) => {
+    setCurrentUsername(username);
+  };
 
   // Effet pour vérifier les popups actives
   useEffect(() => {
@@ -568,6 +592,7 @@ function App() {
           <LiveStreamPage 
             allChatMessages={allChatMessages}
             wsService={wsServiceInstance}
+            onUsernameSet={updateCurrentUsername}
             onDeleteMessage={handleDeleteChatMessage}
             onMuteUser={handleMuteChatUser}
             onBanUser={handleBanChatUser}
@@ -578,6 +603,7 @@ function App() {
         {currentPage === 'admin' && (
           <AdminPage
             allChatMessages={allChatMessages}
+            allConnectedUsers={allConnectedUsers}
             onDeleteMessage={handleDeleteChatMessage}
             onMuteUser={handleMuteChatUser}
             onBanUser={handleBanChatUser}

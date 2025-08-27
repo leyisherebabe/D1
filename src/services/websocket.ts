@@ -35,4 +35,16 @@ export class WebSocketService {
       console.warn('WebSocket not open. Message not sent.');
     }
   }
+  
+  sendUserInfo(username: string, page: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify({
+        type: 'user_info',
+        username: username,
+        page: page
+      }));
+    } else {
+      console.warn('WebSocket not open. User info not sent.');
+    }
+  }
 }

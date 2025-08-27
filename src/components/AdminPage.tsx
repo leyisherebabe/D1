@@ -23,6 +23,7 @@ import { ChatMessage, ConnectedUser, StreamLog, Report, PopupAnnouncement } from
 
 interface AdminPageProps {
   allChatMessages: ChatMessage[];
+  allConnectedUsers: ConnectedUser[];
   onDeleteMessage: (messageId: string) => void;
   onMuteUser: (username: string, moderatorUsername: string) => void;
   onBanUser: (username: string, moderatorUsername: string) => void;
@@ -30,12 +31,12 @@ interface AdminPageProps {
 
 const AdminPage: React.FC<AdminPageProps> = ({
   allChatMessages,
+  allConnectedUsers,
   onDeleteMessage,
   onMuteUser,
   onBanUser
 }) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'chat' | 'logs' | 'reports' | 'announcements'>('overview');
-  const [connectedUsers, setConnectedUsers] = useState<ConnectedUser[]>([]);
   const [streamLogs, setStreamLogs] = useState<StreamLog[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [announcements, setAnnouncements] = useState<PopupAnnouncement[]>([]);
@@ -54,27 +55,6 @@ const AdminPage: React.FC<AdminPageProps> = ({
     setReports(savedReports);
     setAnnouncements(savedAnnouncements);
 
-    // Simuler des utilisateurs connectés
-    const mockUsers: ConnectedUser[] = [
-      {
-        id: '1',
-        username: 'Anonyme_123',
-        ip: '192.168.1.45',
-        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        connectTime: new Date(Date.now() - 1800000),
-        lastActivity: new Date(Date.now() - 300000),
-        page: '/live'
-      },
-      {
-        id: '2',
-        username: 'Ghost_456',
-        ip: '10.0.0.23',
-        userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
-        connectTime: new Date(Date.now() - 3600000),
-        lastActivity: new Date(Date.now() - 120000),
-        page: '/streams'
-      }
-    ];
 
     const mockLogs: StreamLog[] = [
       {
@@ -94,7 +74,6 @@ const AdminPage: React.FC<AdminPageProps> = ({
       }
     ];
 
-    setConnectedUsers(mockUsers);
     setStreamLogs(mockLogs);
   }, []);
 
@@ -141,14 +120,15 @@ const AdminPage: React.FC<AdminPageProps> = ({
 
   const banUser = (userId: string) => {
     if (confirm('Êtes-vous sûr de vouloir bannir cet utilisateur ?')) {
-      setConnectedUsers(prev => prev.filter(user => user.id !== userId));
+      // Note: Dans une vraie implémentation, ceci devrait envoyer une commande au serveur
+      // pour bannir l'utilisateur. Pour l'instant, on simule juste avec un log.
       
       const logEntry: StreamLog = {
         id: Date.now().toString(),
         action: 'USER_BANNED',
         details: 'Utilisateur banni par l\'administrateur',
         timestamp: new Date(),
-        username: connectedUsers.find(u => u.id === userId)?.username
+        username: allConnectedUsers.find(u => u.id === userId)?.username
       };
       setStreamLogs(prev => [logEntry, ...prev]);
     }
@@ -158,7 +138,7 @@ const AdminPage: React.FC<AdminPageProps> = ({
     <div className="space-y-8">
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'Utilisateurs connectés', value: connectedUsers.length, icon: Users, color: 'from-blue-500 to-cyan-500' },
+          { label: 'Utilisateurs connectés', value: allConnectedUsers.length, icon: Users, color: 'from-blue-500 to-cyan-500' },
           { label: 'Messages chat', value: allChatMessages.length, icon: MessageCircle, color: 'from-green-500 to-emerald-500' },
           { label: 'Signalements', value: reports.filter(r => r.status === 'pending').length, icon: AlertTriangle, color: 'from-orange-500 to-red-500' },
           { label: 'Logs système', value: streamLogs.length, icon: Activity, color: 'from-purple-500 to-pink-500' }
@@ -296,7 +276,7 @@ const AdminPage: React.FC<AdminPageProps> = ({
             </tr>
           </thead>
           <tbody>
-            {connectedUsers.map((user) => (
+            {allConnectedUsers.map((user) => (
               <tr key={user.id} className="border-b border-slate-800 hover:bg-slate-800/30">
                 <td className="py-4 text-white font-medium">{user.username}</td>
                 <td className="py-4 text-slate-300 font-mono text-sm">{user.ip}</td>
@@ -317,6 +297,13 @@ const AdminPage: React.FC<AdminPageProps> = ({
           </tbody>
         </table>
       </div>
+      
+      {allConnectedUsers.length === 0 && (
+        <div className="text-center py-12 text-slate-500">
+          <Users className="h-12 w-12 mx-auto mb-4" />
+          <p>Aucun utilisateur connecté pour le moment</p>
+        </div>
+      )}
     </div>
   );
 

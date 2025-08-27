@@ -28,6 +28,7 @@ import { WebSocketService } from './services/websocket';
 interface LiveStreamPageProps {
   allChatMessages: ChatMessageType[];
   wsService: WebSocketService | null;
+  onUsernameSet: (username: string) => void;
   onDeleteMessage: (messageId: string) => void;
   onMuteUser: (username: string, moderatorUsername: string) => void;
   onBanUser: (username: string, moderatorUsername: string) => void;
@@ -38,6 +39,7 @@ interface LiveStreamPageProps {
 const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
   allChatMessages,
   wsService,
+  onUsernameSet,
   onDeleteMessage,
   onMuteUser,
   onBanUser,
@@ -149,6 +151,13 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
       }
       
       setIsUsernameSet(true);
+      onUsernameSet(username);
+      
+      // Envoyer les informations utilisateur au serveur
+      if (wsService) {
+        wsService.sendUserInfo(username, 'live');
+      }
+      
       const welcomeMessage: ChatMessageType = {
         id: Date.now().toString(),
         username: 'StreamBot',
@@ -165,6 +174,12 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
   const handleModPasswordSubmit = () => {
     if (verifyModPassword()) {
       setIsUsernameSet(true);
+      onUsernameSet(username);
+      
+      // Envoyer les informations utilisateur au serveur
+      if (wsService) {
+        wsService.sendUserInfo(username, 'live');
+      }
       
       const welcomeMessage: ChatMessageType = {
         id: Date.now().toString(),
