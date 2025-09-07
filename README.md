@@ -23,7 +23,7 @@ Une plateforme de streaming sécurisée et anonyme avec chat en temps réel, ges
 
 ### 1. Cloner le projet
 ```bash
-git clone <[https://github.com/leyisherebabe/D1]>
+git clone <url-du-repo>
 cd abd-stream
 ```
 
@@ -236,4 +236,20 @@ Ce projet est sous licence MIT. Voir le fichier `LICENSE` pour plus de détails.
 ## 🆘 Support
 
 - **Issues GitHub** : Pour les bugs et demandes de fonctionnalités
-- **Discord** : Serveur co
+- **Discord** : Serveur communautaire (lien dans l'app)
+- **Email** : contact@abdstream.com
+
+## 🎯 Roadmap
+
+- [ ] Support multi-streams simultanés
+- [ ] Intégration avec d'autres plateformes de streaming
+- [ ] Application mobile
+- [ ] API REST complète
+- [ ] Système de notifications push
+- [ ] Enregistrement automatique des streams
+
+---
+
+**Développé avec ❤️ par ley**
+
+*Pour une expérience de streaming sécurisée et anonyme*
