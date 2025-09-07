@@ -20,31 +20,36 @@ import {
 import ChatMessage from './chat/ChatMessage';
 import EmojiPicker from './chat/EmojiPicker';
 import ReportModal from './modals/ReportModal';
-import { ChatMessage as ChatMessageType, Report } from '../types';
-import { MODERATOR_PASSWORDS } from '../utils/constants';
+import { ChatMessage as ChatMessageType, Report, ConnectedUser } from '../types';
 import { formatTime, checkModeratorCredentials } from '../utils/helpers';
 import { WebSocketService } from './services/websocket';
 
 interface LiveStreamPageProps {
   allChatMessages: ChatMessageType[];
+  allConnectedUsers: ConnectedUser[];
   wsService: WebSocketService | null;
-  onUsernameSet: (username: string) => void;
+  currentUser: any;
   onDeleteMessage: (messageId: string) => void;
   onMuteUser: (username: string, moderatorUsername: string) => void;
   onBanUser: (username: string, moderatorUsername: string) => void;
   onReportMessage: (report: Report) => void;
   onAddMessage: (message: ChatMessageType) => void;
+  userRole: 'viewer' | 'moderator' | 'admin';
+  streamKey?: string | null;
 }
 
 const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
   allChatMessages,
+  allConnectedUsers,
   wsService,
-  onUsernameSet,
+  currentUser,
   onDeleteMessage,
   onMuteUser,
   onBanUser,
   onReportMessage,
-  onAddMessage
+  onAddMessage,
+  userRole: propUserRole,
+  streamKey
 }) => {
   const [currentStream, setCurrentStream] = useState<any>(null);
   const [streamStats, setStreamStats] = useState({
@@ -52,6 +57,7 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
     likes: 0,
     duration: 0
   });
+  const [streamData, setStreamData] = useState<any>(null);
   const [isPlaying, setIsPlaying] = useState(true);
   const [isMuted, setIsMuted] = useState(false);
   const [volume, setVolume] = useState(50);
@@ -61,122 +67,130 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
   const [username, setUsername] = useState('');
   const [isUsernameSet, setIsUsernameSet] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [userRole, setUserRole] = useState<'viewer' | 'moderator' | 'admin'>('viewer');
+  const [localUserRole, setLocalUserRole] = useState<'viewer' | 'moderator' | 'admin'>('viewer');
   const [showModPassword, setShowModPassword] = useState(false);
   const [modPassword, setModPassword] = useState('');
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showReportModal, setShowReportModal] = useState(false);
   const [reportingMessage, setReportingMessage] = useState<ChatMessageType | null>(null);
+  const [isAuthenticatingMod, setIsAuthenticatingMod] = useState(false);
+
+  // Vérifier si l'utilisateur actuel est mute
+  const connectedUser = allConnectedUsers?.find(user => user.username === currentUser?.username);
+  const isCurrentUserMuted = connectedUser?.isMuted || false;
+  const muteEndTime = connectedUser?.muteEndTime;
+  
+  // Calculer le temps restant si l'utilisateur est mute
+  const [timeRemaining, setTimeRemaining] = useState<string>('');
+  
+  useEffect(() => {
+    if (isCurrentUserMuted && muteEndTime) {
+      const interval = setInterval(() => {
+        const now = new Date();
+        const endTime = new Date(muteEndTime);
+        const remaining = endTime.getTime() - now.getTime();
+        
+        if (remaining <= 0) {
+          setTimeRemaining('');
+          clearInterval(interval);
+        } else {
+          const minutes = Math.floor(remaining / (1000 * 60));
+          const seconds = Math.floor((remaining % (1000 * 60)) / 1000);
+          
+          if (minutes > 0) {
+            setTimeRemaining(`${minutes}m ${seconds}s`);
+          } else {
+            setTimeRemaining(`${seconds}s`);
+          }
+        }
+      }, 1000);
+      
+      return () => clearInterval(interval);
+    }
+  }, [isCurrentUserMuted, muteEndTime]);
+
+  // Synchroniser le rôle local avec le rôle reçu d'App.tsx
+  useEffect(() => {
+    setLocalUserRole(propUserRole);
+  }, [propUserRole]);
+
+  // Gérer la réponse d'authentification des modérateurs
+  useEffect(() => {
+    if (isAuthenticatingMod) {
+      if (propUserRole === 'moderator' || propUserRole === 'admin') {
+        // Authentification réussie
+        setIsUsernameSet(true);
+        setShowModPassword(false);
+        setModPassword('');
+        setIsAuthenticatingMod(false);
+        
+        // Envoyer les informations utilisateur au serveur
+        if (wsService) {
+          wsService.sendUserInfo(username, 'live');
+        }
+        
+        const welcomeMessage: ChatMessageType = {
+          id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+          username: 'StreamBot',
+          message: `👑 ${username} (${propUserRole.toUpperCase()}) a rejoint le chat !`,
+          timestamp: new Date(),
+          role: 'admin',
+          isSystem: true,
+          color: '#ef4444'
+        };
+        onAddMessage(welcomeMessage);
+      } else if (modPassword.length > 0) {
+        // Authentification échouée
+        alert('Mot de passe incorrect');
+        setIsAuthenticatingMod(false);
+      }
+    }
+  }, [propUserRole, isAuthenticatingMod, modPassword, username, onAddMessage, wsService]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const chatRef = useRef<HTMLDivElement>(null);
   const streamContainerRef = useRef<HTMLDivElement>(null);
 
-  // Messages automatiques du système
+  // Charger les données du stream si une clé est fournie
   useEffect(() => {
-    try {
-      const interval = setInterval(() => {
-        try {
-          setViewers(prev => Math.max(50, prev + Math.floor(Math.random() * 20) - 10));
-          
-          if (Math.random() > 0.85) {
-            const randomUsernames = [
-              'Anonyme_' + Math.floor(Math.random() * 999),
-              'Ghost_' + Math.floor(Math.random() * 999),
-              'Viewer_' + Math.floor(Math.random() * 999)
-            ];
-            
-            const randomMessages = [
-              'Excellent stream ! 👏',
-              'Merci pour le contenu de qualité',
-              'Super travail ! 🔥',
-              'J\'adore cette communauté',
-              'Bravo pour l\'anonymat',
-              'Qualité parfaite !',
-              'Continue comme ça ! 💪'
-            ];
-            
-            const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#84cc16'];
-            
-            const newMessage: ChatMessageType = {
-              id: Date.now().toString(),
-              username: randomUsernames[Math.floor(Math.random() * randomUsernames.length)],
-              message: randomMessages[Math.floor(Math.random() * randomMessages.length)],
-              timestamp: new Date(),
-              role: 'viewer',
-              color: colors[Math.floor(Math.random() * colors.length)],
-              ip: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`
-            };
-            
-            onAddMessage(newMessage);
-          }
-        } catch (error) {
-          console.error('Error in automatic message generation:', error);
+    if (streamKey && wsService) {
+      // Rejoindre le stream spécifique
+      wsService.send(JSON.stringify({
+        type: 'join_stream',
+        streamKey: streamKey
+      }));
+
+      // Écouter les réponses
+      const originalCallback = wsService.onMessageCallback;
+      wsService.onMessageCallback = (data) => {
+        if (originalCallback) originalCallback(data);
+        
+        if (data.type === 'stream_joined' && data.success) {
+          setStreamData(data.stream);
+          setStreamStats({
+            viewers: data.stream.viewers,
+            likes: data.stream.likes || 0,
+            duration: data.stream.duration
+          });
         }
-      }, 5000);
-
-      return () => clearInterval(interval);
-    } catch (error) {
-      console.error('Error setting up automatic messages:', error);
+      };
     }
-  }, [onAddMessage]);
-
-  // Effet pour faire défiler le chat vers le bas
-  useEffect(() => {
-    try {
-      if (chatRef.current) {
-        chatRef.current.scrollTop = chatRef.current.scrollHeight;
-      }
-    } catch (error) {
-      console.error('Error scrolling chat:', error);
-    }
-  }, [allChatMessages]);
-
-  // Gestion des erreurs React avec un Error Boundary simple
-  useEffect(() => {
-    const handleError = (event: ErrorEvent) => {
-      console.error('Global error caught:', event.error);
-      event.preventDefault();
-    };
-
-    const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-      console.error('Unhandled promise rejection:', event.reason);
-      event.preventDefault();
-    };
-
-    window.addEventListener('error', handleError);
-    window.addEventListener('unhandledrejection', handleUnhandledRejection);
 
     return () => {
-      window.removeEventListener('error', handleError);
-      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
-    };
-  }, []);
-        
-        const randomMessages = [
-          'Excellent stream ! 👏',
-          'Merci pour le contenu de qualité',
-          'Super travail ! 🔥',
-          'J\'adore cette communauté',
-          'Bravo pour l\'anonymat',
-          'Qualité parfaite !',
-          'Continue comme ça ! 💪'
-        ];
-        
-        const colors = ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#06b6d4', '#84cc16'];
-        
-        const newMessage: ChatMessageType = {
-          id: Date.now().toString(),
-          username: randomUsernames[Math.floor(Math.random() * randomUsernames.length)],
-          message: randomMessages[Math.floor(Math.random() * randomMessages.length)],
-          timestamp: new Date(),
-          role: 'viewer',
-          color: colors[Math.floor(Math.random() * colors.length)],
-          ip: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`
-        };
-        
-        onAddMessage(newMessage);
+      if (streamKey && wsService) {
+        // Quitter le stream
+        wsService.send(JSON.stringify({
+          type: 'leave_stream',
+          streamKey: streamKey
+        }));
       }
+    };
+  }, [streamKey, wsService]);
+
+  // Mise à jour des viewers
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setViewers(prev => Math.max(50, prev + Math.floor(Math.random() * 20) - 10));
     }, 5000);
 
     return () => clearInterval(interval);
@@ -188,39 +202,15 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
     }
   }, [allChatMessages]);
 
-  const verifyModPassword = () => {
-    const lowerUsername = username.toLowerCase();
-    let expectedPassword = '';
-    let role: 'viewer' | 'moderator' | 'admin' = 'viewer';
-
-    if (lowerUsername.includes('admin')) {
-      expectedPassword = MODERATOR_PASSWORDS.admin;
-      role = 'admin';
-    } else if (lowerUsername.includes('mod')) {
-      expectedPassword = MODERATOR_PASSWORDS.mod;
-      role = 'moderator';
-    }
-
-    if (modPassword === expectedPassword) {
-      setUserRole(role);
-      setShowModPassword(false);
-      setModPassword('');
-      return true;
-    } else {
-      alert('Mot de passe incorrect');
-      return false;
-    }
-  };
-
   const setUserUsername = () => {
     if (username.trim()) {
+      
       if (checkModeratorCredentials(username)) {
         setShowModPassword(true);
         return;
       }
       
       setIsUsernameSet(true);
-      onUsernameSet(username);
       
       // Envoyer les informations utilisateur au serveur
       if (wsService) {
@@ -228,7 +218,7 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
       }
       
       const welcomeMessage: ChatMessageType = {
-        id: Date.now().toString(),
+        id: `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         username: 'StreamBot',
         message: `👋 Bienvenue ${username} dans le chat !`,
         timestamp: new Date(),
@@ -241,148 +231,45 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
   };
 
   const handleModPasswordSubmit = () => {
-    if (verifyModPassword()) {
-      setIsUsernameSet(true);
-      onUsernameSet(username);
-      
-      // Envoyer les informations utilisateur au serveur
-      if (wsService) {
-        wsService.sendUserInfo(username, 'live');
-      }
-      
-      const welcomeMessage: ChatMessageType = {
-        id: Date.now().toString(),
-        username: 'StreamBot',
-        message: `👑 ${username} (${userRole.toUpperCase()}) a rejoint le chat !`,
-        timestamp: new Date(),
-        role: 'admin',
-        isSystem: true,
-        color: '#ef4444'
-      };
-      onAddMessage(welcomeMessage);
+    if (!wsService) {
+      alert('Erreur: Connexion WebSocket non disponible.');
+      return;
     }
+
+    setIsAuthenticatingMod(true);
+
+    const lowerUsername = username.toLowerCase();
+    let roleToSend: 'viewer' | 'moderator' | 'admin' = 'viewer';
+    if (lowerUsername.includes('admin')) {
+      roleToSend = 'admin';
+    } else if (lowerUsername.includes('mod')) {
+      roleToSend = 'moderator';
+    }
+
+    // Envoyer la requête d'authentification au serveur
+    wsService.sendAuthentication(username, roleToSend, modPassword);
   };
 
   const sendMessage = () => {
-    if (message.trim() && isUsernameSet) {
-      console.log('Sending message:', message);
-      console.log('Username:', username);
-      console.log('WebSocket service:', wsService);
-      
+    if (message.trim() && isUsernameSet && wsService) {
+      const messageId = `${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
       const newMessage: ChatMessageType = {
-        id: Date.now().toString(),
+        id: messageId,
         username: username,
         message: message.trim(),
         timestamp: new Date(),
-        role: userRole,
-        color: userRole === 'admin' ? '#ef4444' : userRole === 'moderator' ? '#8b5cf6' : '#3b82f6',
-        ip: `192.168.${Math.floor(Math.random() * 255)}.${Math.floor(Math.random() * 255)}`
+        role: localUserRole,
+        color: localUserRole === 'admin' ? '#ef4444' : localUserRole === 'moderator' ? '#8b5cf6' : '#3b82f6',
+        ip: undefined // L'IP sera ajoutée par le serveur
       };
       
-      console.log('New message object:', newMessage);
+      // Envoyer via WebSocket
+      wsService.sendMessage(newMessage);
       
-      try {
-        // Ajouter localement d'abord
-        onAddMessage(newMessage);
-        
-        // Envoyer via WebSocket si disponible
-        if (wsService && wsService.ws && wsService.ws.readyState === WebSocket.OPEN) {
-          wsService.sendMessage(newMessage);
-          console.log('Message sent via WebSocket');
-        } else {
-          console.warn('WebSocket not available, message added locally only');
-        }
-        
-        setMessage('');
-        console.log('Message sent successfully');
-      } catch (error) {
-        console.error('Error sending message:', error);
-        // Ne pas vider le message en cas d'erreur
-      }
-    } else {
-      console.log('Cannot send message:', {
-        messageEmpty: !message.trim(),
-        usernameNotSet: !isUsernameSet,
-        wsServiceMissing: !wsService
-      });
-    }
-  };
-
-  // Fonction pour gérer les erreurs React
-  const handleError = (error: Error, errorInfo: any) => {
-    console.error('React Error:', error);
-    console.error('Error Info:', errorInfo);
-  };
-
-  // Wrapper pour les fonctions qui peuvent causer des erreurs
-  const safeExecute = (fn: () => void, errorMessage: string) => {
-    try {
-      fn();
-    } catch (error) {
-      console.error(errorMessage, error);
-    }
-  };
-
-  const togglePlay = () => {
-    safeExecute(() => {
-      if (videoRef.current) {
-        if (isPlaying) {
-          videoRef.current.pause();
-        } else {
-          videoRef.current.play();
-        }
-        setIsPlaying(!isPlaying);
-      }
-    }, 'Error toggling play state');
-  };
-
-  const toggleMute = () => {
-    safeExecute(() => {
-      if (videoRef.current) {
-        videoRef.current.muted = !isMuted;
-        setIsMuted(!isMuted);
-      }
-    }, 'Error toggling mute state');
-  };
-
-  const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    safeExecute(() => {
-      const newVolume = parseInt(e.target.value);
-      setVolume(newVolume);
-      if (videoRef.current) {
-        videoRef.current.volume = newVolume / 100;
-      }
-    }, 'Error changing volume');
-  };
-
-  const setUserUsername = () => {
-    safeExecute(() => {
-      if (username.trim()) {
-        if (checkModeratorCredentials(username)) {
-          setShowModPassword(true);
-          return;
-        }
+      // Ne pas ajouter localement car le message sera reçu via WebSocket
       
-        setIsUsernameSet(true);
-        onUsernameSet(username);
-        
-        // Envoyer les informations utilisateur au serveur
-        if (wsService && wsService.ws && wsService.ws.readyState === WebSocket.OPEN) {
-          wsService.sendUserInfo(username, 'live');
-        }
-        
-        const welcomeMessage: ChatMessageType = {
-          id: Date.now().toString(),
-          username: 'StreamBot',
-          message: `👋 Bienvenue ${username} dans le chat !`,
-          timestamp: new Date(),
-          role: 'admin',
-          isSystem: true,
-          color: '#ef4444'
-        };
-        onAddMessage(welcomeMessage);
-      }
-    }, 'Error setting username');
+      setMessage('');
+    }
   };
 
   const togglePlay = () => {
@@ -495,9 +382,10 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
               </button>
               <button
                 onClick={handleModPasswordSubmit}
-                className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white py-3 px-4 rounded-xl font-medium transition-all transform hover:scale-105"
+                disabled={isAuthenticatingMod}
+                className="flex-1 bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 disabled:opacity-50 text-white py-3 px-4 rounded-xl font-medium transition-all transform hover:scale-105"
               >
-                Vérifier
+                {isAuthenticatingMod ? 'Vérification...' : 'Vérifier'}
               </button>
             </div>
           </div>
@@ -531,9 +419,10 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
                   className="w-full h-full object-cover"
                   autoPlay
                   muted={isMuted}
+                  controls
                   poster="https://images.pexels.com/photos/1763075/pexels-photo-1763075.jpeg?auto=compress&cs=tinysrgb&w=1260&h=750&dpr=1"
                 >
-                  <source src="http://localhost:8000/live/stream.m3u8" type="application/x-mpegURL" />
+                  <source src={streamData?.videoUrl || "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4"} type="video/mp4" />
                   Votre navigateur ne supporte pas la lecture vidéo.
                 </video>
                 
@@ -613,8 +502,27 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
             <div className="mt-8 glass-dark border border-slate-700/50 rounded-2xl p-8 animate-in slide-in-from-bottom-4 duration-700 delay-300">
               <h2 className="text-3xl font-semibold text-white mb-6 flex items-center">
                 <Sparkles className="h-8 w-8 mr-3 text-red-500" />
-                🔴 Stream Live Anonyme Premium
+                🔴 {streamData?.title || 'Stream Live Anonyme Premium'}
               </h2>
+              
+              {streamKey && (
+                <div className="mb-6 p-4 bg-slate-800/50 rounded-xl border border-slate-700/50">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <h3 className="text-lg font-semibold text-white">Clé de Stream</h3>
+                      <p className="text-slate-400">Cette URL est unique à ce stream</p>
+                    </div>
+                    <div className="text-right">
+                      <code className="bg-slate-900 text-cyan-400 px-3 py-2 rounded-lg font-mono text-sm">
+                        {streamKey}
+                      </code>
+                      <p className="text-xs text-slate-500 mt-1">
+                        URL: /live/{streamKey}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
               
               {/* Règles du Chat */}
               <div className="bg-slate-800/50 rounded-2xl p-6 border border-slate-700/50">
@@ -641,36 +549,6 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
 
           {/* Sidebar */}
           <div className="space-y-8">
-            {/* Configuration du nom d'utilisateur */}
-            {!isUsernameSet && (
-              <div className="glass-dark bg-gradient-to-br from-indigo-500/20 to-purple-600/20 border border-indigo-500/30 rounded-2xl p-8 text-white animate-in slide-in-from-right-8 duration-700">
-                <h3 className="text-xl font-semibold mb-4 flex items-center">
-                  <Users className="h-5 w-5 mr-2" />
-                  👋 Rejoignez le Chat !
-                </h3>
-                <p className="text-indigo-100 text-sm mb-6">
-                  Choisissez un nom d'utilisateur pour participer à la discussion en temps réel
-                </p>
-                <div className="flex space-x-3">
-                  <input
-                    type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    placeholder="Votre pseudo..."
-                    className="flex-1 h-12 bg-white/10 border border-white/20 rounded-xl px-4 text-white placeholder-white/60 focus:border-white focus:outline-none focus:ring-4 focus:ring-white/20 transition-all"
-                    maxLength={20}
-                    onKeyPress={(e) => e.key === 'Enter' && setUserUsername()}
-                  />
-                  <button
-                    onClick={setUserUsername}
-                    disabled={!username.trim()}
-                    className="h-12 bg-white/20 hover:bg-white/30 disabled:opacity-50 text-white px-6 rounded-xl font-medium transition-all transform hover:scale-105"
-                  >
-                    GO
-                  </button>
-                </div>
-              </div>
-            )}
 
             {/* Chat */}
             <div className="glass-dark border border-slate-700/50 rounded-2xl p-6 animate-in slide-in-from-right-8 duration-700 delay-200">
@@ -690,11 +568,11 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
                   <ChatMessage
                     key={msg.id}
                     message={msg}
-                    currentUsername={username}
-                    userRole={userRole}
+                    currentUsername={currentUser?.username || ''}
+                    userRole={localUserRole}
                     onDeleteMessage={onDeleteMessage}
-                    onMuteUser={(targetUsername) => onMuteUser(targetUsername, username)}
-                    onBanUser={(targetUsername) => onBanUser(targetUsername, username)}
+                    onMuteUser={(targetUsername) => onMuteUser(targetUsername, currentUser?.username || '')}
+                    onBanUser={(targetUsername) => onBanUser(targetUsername, currentUser?.username || '')}
                     onReportMessage={(message) => {
                       setReportingMessage(message);
                       setShowReportModal(true);
@@ -703,17 +581,17 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
                 ))}
               </div>
               
-              {isUsernameSet ? (
+              {currentUser ? (
                 <div className="space-y-4">
                   <div className="flex items-center space-x-2 text-xs text-slate-400">
                     <div className="flex items-center space-x-2">
                       <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                      <span>Connecté en tant que {username}</span>
-                      {userRole !== 'viewer' && (
+                      <span>Connecté en tant que {currentUser?.username}</span>
+                      {localUserRole !== 'viewer' && (
                         <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          userRole === 'admin' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
+                          localUserRole === 'admin' ? 'bg-red-500/20 text-red-400 border border-red-500/30' : 'bg-purple-500/20 text-purple-400 border border-purple-500/30'
                         }`}>
-                          {userRole.toUpperCase()}
+                          {localUserRole.toUpperCase()}
                         </span>
                       )}
                     </div>
@@ -725,16 +603,18 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
                         type="text"
                         value={message}
                         onChange={(e) => setMessage(e.target.value)}
-                        placeholder="Tapez votre message..."
+                       placeholder={isCurrentUserMuted ? `Vous êtes mute pour encore ${timeRemaining}` : "Tapez votre message..."}
                         className="w-full h-12 bg-slate-800 border border-slate-600 rounded-xl px-4 pr-12 text-white placeholder-slate-400 focus:border-cyan-400 focus:outline-none focus:ring-4 focus:ring-cyan-400/20 transition-all"
                         onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
                         maxLength={200}
+                        disabled={isCurrentUserMuted}
                       />
                       <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center space-x-1">
                         <div className="relative">
                           <button 
                             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
                             className="text-slate-400 hover:text-slate-300 transition-colors transform hover:scale-110"
+                            disabled={isCurrentUserMuted}
                           >
                             <Smile className="h-5 w-5" />
                           </button>
@@ -749,7 +629,7 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
                     </div>
                     <button
                       onClick={sendMessage}
-                      disabled={!message.trim()}
+                      disabled={!message.trim() || isCurrentUserMuted}
                       className="h-12 w-12 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 disabled:bg-slate-600 disabled:cursor-not-allowed text-white rounded-xl flex items-center justify-center transition-all transform hover:scale-105"
                     >
                       <Send className="h-5 w-5" />
@@ -758,13 +638,74 @@ const LiveStreamPage: React.FC<LiveStreamPageProps> = ({
                   
                   <div className="flex items-center justify-between text-xs text-slate-500">
                     <span>{message.length}/200</span>
-                    <span className="text-green-400">● En ligne</span>
+                    <span className={isCurrentUserMuted ? "text-red-400" : "text-green-400"}>
+                      ● {isCurrentUserMuted ? `Mute (${timeRemaining})` : "En ligne"}
+                    </span>
                   </div>
                 </div>
               ) : (
-                <div className="text-center py-8 text-slate-500">
-                  <MessageCircle className="h-12 w-12 mx-auto mb-4 text-slate-600" />
-                  <p className="text-sm">Configurez votre nom d'utilisateur pour participer au chat</p>
+                <div className="text-center py-8">
+                  <div className="glass-dark border border-slate-700/50 rounded-2xl p-8">
+                    <MessageCircle className="h-16 w-16 mx-auto mb-6 text-slate-600" />
+                    <h3 className="text-xl font-bold text-white mb-4">Rejoignez la Conversation !</h3>
+                    <p className="text-slate-300 mb-6 leading-relaxed">
+                      Connectez-vous ou créez un compte pour participer au chat en direct et échanger avec la communauté.
+                    </p>
+                    
+                    <div className="space-y-4">
+                      <div className="flex items-center justify-center space-x-4 text-sm text-slate-400 mb-6">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                          <span>Chat en temps réel</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse"></div>
+                          <span>Communauté active</span>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                          <span>100% anonyme</span>
+                        </div>
+                      </div>
+                      
+                      <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                        <button
+                          onClick={() => window.location.href = '/'}
+                          className="bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white px-6 py-3 rounded-xl font-semibold transition-all transform hover:scale-105 shadow-lg hover:shadow-xl flex items-center justify-center space-x-2"
+                        >
+                          <span>🚀 Se Connecter</span>
+                        </button>
+                        <button
+                          onClick={() => window.location.href = '/'}
+                          className="bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 text-white px-6 py-3 rounded-xl font-semibold transition-all hover:border-white/20 flex items-center justify-center space-x-2"
+                        >
+                          <span>✨ Créer un Compte</span>
+                        </button>
+                      </div>
+                      
+                      <div className="mt-6 p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
+                        <p className="text-xs text-slate-400 mb-2">💡 Pourquoi créer un compte ?</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-slate-300">
+                          <div className="flex items-center space-x-2">
+                            <span>🔒</span>
+                            <span>Sécurité maximale</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span>👤</span>
+                            <span>Identité préservée</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span>💬</span>
+                            <span>Chat illimité</span>
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span>⚡</span>
+                            <span>Accès instantané</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
               )}
             </div>

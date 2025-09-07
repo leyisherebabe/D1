@@ -17,9 +17,14 @@ import {
   X,
   Crown,
   Sparkles,
-  VolumeX
+  VolumeX,
+  Key,
+  Play,
+  UserCheck,
+  Image,
+  FileText
 } from 'lucide-react';
-import { ChatMessage, ConnectedUser, StreamLog, Report, PopupAnnouncement } from '../types';
+import { ChatMessage, ConnectedUser, StreamLog, Report, PopupAnnouncement, StreamKey } from '../types';
 
 interface AdminPageProps {
   allChatMessages: ChatMessage[];
@@ -28,6 +33,7 @@ interface AdminPageProps {
   onDeleteMessage: (messageId: string) => void;
   onMuteUser: (username: string, moderatorUsername: string) => void;
   onBanUser: (username: string, moderatorUsername: string) => void;
+  liveStreamActive: boolean;
 }
 
 const AdminPage: React.FC<AdminPageProps> = ({
@@ -36,26 +42,42 @@ const AdminPage: React.FC<AdminPageProps> = ({
   wsService,
   onDeleteMessage,
   onMuteUser,
-  onBanUser
+  onBanUser,
+  liveStreamActive
 }) => {
-  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'chat' | 'logs' | 'reports' | 'announcements'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'users' | 'chat' | 'logs' | 'reports' | 'announcements' | 'streams' | 'roles'>('overview');
   const [streamLogs, setStreamLogs] = useState<StreamLog[]>([]);
   const [reports, setReports] = useState<Report[]>([]);
   const [announcements, setAnnouncements] = useState<PopupAnnouncement[]>([]);
+  const [streamKeys, setStreamKeys] = useState<StreamKey[]>([]);
   const [showNewAnnouncement, setShowNewAnnouncement] = useState(false);
+  const [showNewStreamKey, setShowNewStreamKey] = useState(false);
+  const [editingStream, setEditingStream] = useState<StreamKey | null>(null);
   const [newAnnouncement, setNewAnnouncement] = useState({
     title: '',
     description: '',
     image: ''
   });
+  const [newStreamKey, setNewStreamKey] = useState({
+    key: '',
+    title: '',
+    description: '',
+    thumbnail: ''
+  });
+  const [bannedUsers, setBannedUsers] = useState<any[]>([]);
+  const [mutedUsers, setMutedUsers] = useState<any[]>([]);
+  const [showBanManagement, setShowBanManagement] = useState(false);
+  const [adminResponse, setAdminResponse] = useState<string>('');
 
   useEffect(() => {
     // Charger les données depuis localStorage
     const savedReports = JSON.parse(localStorage.getItem('chatReports') || '[]');
     const savedAnnouncements = JSON.parse(localStorage.getItem('popupAnnouncements') || '[]');
+    const savedStreamKeys = JSON.parse(localStorage.getItem('streamKeys') || '[]');
     
     setReports(savedReports);
     setAnnouncements(savedAnnouncements);
+    setStreamKeys(savedStreamKeys);
 
 
     const mockLogs: StreamLog[] = [
@@ -78,6 +100,65 @@ const AdminPage: React.FC<AdminPageProps> = ({
 
     setStreamLogs(mockLogs);
   }, []);
+
+  useEffect(() => {
+    // Écouter les réponses admin
+    if (wsService) {
+      const originalCallback = wsService.onMessageCallback;
+      wsService.onMessageCallback = (data) => {
+        if (originalCallback) originalCallback(data);
+        
+        if (data.type === 'admin_response') {
+          setAdminResponse(data.message);
+          
+          if (data.command === 'list_banned' && data.success) {
+            setBannedUsers(data.data || []);
+          } else if (data.command === 'list_muted' && data.success) {
+            setMutedUsers(data.data || []);
+          }
+          
+          // Effacer le message après 5 secondes
+          setTimeout(() => setAdminResponse(''), 5000);
+        }
+      };
+    }
+  }, [wsService]);
+
+  const loadBannedUsers = () => {
+    if (wsService) {
+      wsService.sendAdminCommand('list_banned');
+    }
+  };
+
+  const loadMutedUsers = () => {
+    if (wsService) {
+      wsService.sendAdminCommand('list_muted');
+    }
+  };
+
+  const unbanUser = (fingerprint?: string, ip?: string) => {
+    if (wsService && (fingerprint || ip)) {
+      wsService.sendAdminCommand('unban_user', { fingerprint, ip });
+      // Recharger la liste après un court délai
+      setTimeout(() => loadBannedUsers(), 1000);
+    }
+  };
+
+  const unmuteUser = (fingerprint: string) => {
+    if (wsService && fingerprint) {
+      wsService.sendAdminCommand('unmute_user', { fingerprint });
+      // Recharger la liste après un court délai
+      setTimeout(() => loadMutedUsers(), 1000);
+    }
+  };
+
+  const clearExpiredMutes = () => {
+    if (wsService) {
+      wsService.sendAdminCommand('clear_expired_mutes');
+      // Recharger la liste après un court délai
+      setTimeout(() => loadMutedUsers(), 1000);
+    }
+  };
 
   const handleReportAction = (reportId: string, action: 'resolved' | 'dismissed') => {
     const updatedReports = reports.map(report => 
@@ -118,6 +199,59 @@ const AdminPage: React.FC<AdminPageProps> = ({
     const updatedAnnouncements = announcements.filter(ann => ann.id !== id);
     setAnnouncements(updatedAnnouncements);
     localStorage.setItem('popupAnnouncements', JSON.stringify(updatedAnnouncements));
+  };
+
+  const createStreamKey = () => {
+    if (newStreamKey.key && newStreamKey.title) {
+      const streamKey: StreamKey = {
+        id: Date.now().toString(),
+        key: newStreamKey.key,
+        title: newStreamKey.title,
+        description: newStreamKey.description,
+        thumbnail: newStreamKey.thumbnail || 'https://images.pexels.com/photos/1763075/pexels-photo-1763075.jpeg?auto=compress&cs=tinysrgb&w=800&h=450&dpr=1',
+        isActive: false,
+        createdBy: 'Admin',
+        createdAt: new Date(),
+        viewers: 0,
+        duration: 0
+      };
+
+      const updatedStreamKeys = [...streamKeys, streamKey];
+      setStreamKeys(updatedStreamKeys);
+      localStorage.setItem('streamKeys', JSON.stringify(updatedStreamKeys));
+      
+      setNewStreamKey({ key: '', title: '', description: '', thumbnail: '' });
+      setShowNewStreamKey(false);
+    }
+  };
+
+  const updateStreamKey = (streamKey: StreamKey) => {
+    const updatedStreamKeys = streamKeys.map(sk => 
+      sk.id === streamKey.id ? streamKey : sk
+    );
+    setStreamKeys(updatedStreamKeys);
+    localStorage.setItem('streamKeys', JSON.stringify(updatedStreamKeys));
+    setEditingStream(null);
+  };
+
+  const deleteStreamKey = (id: string) => {
+    const updatedStreamKeys = streamKeys.filter(sk => sk.id !== id);
+    setStreamKeys(updatedStreamKeys);
+    localStorage.setItem('streamKeys', JSON.stringify(updatedStreamKeys));
+  };
+
+  const toggleStreamStatus = (id: string) => {
+    const updatedStreamKeys = streamKeys.map(sk => 
+      sk.id === id ? { ...sk, isActive: !sk.isActive, startTime: !sk.isActive ? new Date() : undefined } : sk
+    );
+    setStreamKeys(updatedStreamKeys);
+    localStorage.setItem('streamKeys', JSON.stringify(updatedStreamKeys));
+  };
+
+  const changeUserRole = (userId: string, newRole: 'viewer' | 'moderator' | 'admin' | 'owner') => {
+    if (wsService) {
+      wsService.sendAdminCommand('change_user_role', { userId, newRole });
+    }
   };
 
   const banUser = (userId: string) => {
@@ -545,6 +679,8 @@ const AdminPage: React.FC<AdminPageProps> = ({
           {activeTab === 'overview' && renderOverview()}
           {activeTab === 'users' && renderUsers()}
           {activeTab === 'chat' && renderChat()}
+          {activeTab === 'streams' && renderStreams()}
+          {activeTab === 'roles' && renderRoles()}
           {activeTab === 'reports' && renderReports()}
           {activeTab === 'announcements' && renderAnnouncements()}
         </div>

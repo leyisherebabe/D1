@@ -1,5 +1,6 @@
-export const formatTime = (date: Date) => {
-  return date.toLocaleTimeString('fr-FR', { 
+export const formatTime = (date: Date | string) => {
+  const dateObj = typeof date === 'string' ? new Date(date) : date;
+  return dateObj.toLocaleTimeString('fr-FR', { 
     hour: '2-digit', 
     minute: '2-digit',
     second: '2-digit'

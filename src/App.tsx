@@ -4,14 +4,21 @@ import HomePage from './components/HomePage';
 import StreamsListPage from './components/StreamsListPage';
 import AdminPage from './components/AdminPage';
 import LiveStreamPage from './components/LiveStreamPage';
+import AuthPage from './components/AuthPage';
 import PopupAnnouncement from './components/modals/PopupAnnouncement';
 import DMCAPage from './components/DMCAPage';
 import LegalPage from './components/LegalPage';
-import { ENCRYPTION_KEY, ADMIN_ACCESS_CODE } from './utils/constants';
 import { PopupAnnouncement as PopupAnnouncementType, ChatMessage, Report, ConnectedUser } from './types';
 import { WebSocketService } from './services/websocket'; // Importez le service WebSocket
 
 type Page = 'home' | 'streaming' | 'admin' | 'streams' | 'live' | 'dmca' | 'legal';
+
+// Fonction pour extraire la clé de stream de l'URL
+function getStreamKeyFromUrl() {
+  const path = window.location.pathname;
+  const match = path.match(/^\/live\/(.+)$/);
+  return match ? match[1] : null;
+}
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -23,110 +30,186 @@ function App() {
   const [adminAccess, setAdminAccess] = useState(false);
   const [showAdminPrompt, setShowAdminPrompt] = useState(false);
   const [adminCode, setAdminCode] = useState('');
+  const [userRole, setUserRole] = useState<'viewer' | 'moderator' | 'admin'>('viewer');
   const [showPopup, setShowPopup] = useState(false);
   const [currentPopup, setCurrentPopup] = useState<PopupAnnouncementType | null>(null);
   const [activeUsers, setActiveUsers] = useState(0); // État pour les utilisateurs actifs
   const [allConnectedUsers, setAllConnectedUsers] = useState<ConnectedUser[]>([]);
-  const [allChatMessages, setAllChatMessages] = useState<ChatMessage[]>([
-    {
-      id: '1',
-      username: 'StreamBot',
-      message: '🎉 Bienvenue dans le stream ! Respectez les règles du chat.',
-      timestamp: new Date(Date.now() - 600000),
-      role: 'admin',
-      isSystem: true,
-      color: '#ef4444'
-    },
-    {
-      id: '2',
-      username: 'Anonyme_42',
-      message: 'Super stream ! La qualité est parfaite 🔥',
-      timestamp: new Date(Date.now() - 480000),
-      role: 'viewer',
-      color: '#3b82f6'
-    },
-    {
-      id: '3',
-      username: 'Mod_Sarah',
-      message: 'N\'oubliez pas de suivre les règles ! 🛡️',
-      timestamp: new Date(Date.now() - 240000),
-      role: 'moderator',
-      color: '#8b5cf6'
-    }
-  ]);
+  const [allChatMessages, setAllChatMessages] = useState<ChatMessage[]>([]);
   const [wsServiceInstance, setWsServiceInstance] = useState<WebSocketService | null>(null);
+  const [liveStreamActive, setLiveStreamActive] = useState(false);
 
   // État pour stocker le nom d'utilisateur actuel (pour les mises à jour de page)
   const [currentUsername, setCurrentUsername] = useState<string>('');
+  const [authError, setAuthError] = useState('');
+  const [authSuccess, setAuthSuccess] = useState('');
+  const [currentUser, setCurrentUser] = useState<any>(null);
+
+  // État pour la clé de stream actuelle
+  const [currentStreamKey, setCurrentStreamKey] = useState<string | null>(null);
 
   // Effet pour l'authentification initiale
   useEffect(() => {
     const authenticated = sessionStorage.getItem('authenticated');
     const adminAuth = sessionStorage.getItem('adminAccess');
+    const savedUser = sessionStorage.getItem('currentUser');
+    const savedRole = sessionStorage.getItem('userRole');
+    
     if (authenticated === 'true') {
       setIsAuthenticated(true);
     }
     if (adminAuth === 'true') {
       setAdminAccess(true);
     }
+    if (savedUser) {
+      try {
+        const user = JSON.parse(savedUser);
+        setCurrentUser(user);
+        setCurrentUsername(user.username);
+      } catch (error) {
+        console.error('Error parsing saved user:', error);
+      }
+    }
+    if (savedRole) {
+      setUserRole(savedRole as 'viewer' | 'moderator' | 'admin');
+    }
+
+    // Vérifier si nous sommes sur une page de stream spécifique
+    const streamKey = getStreamKeyFromUrl();
+    if (streamKey) {
+      setCurrentStreamKey(streamKey);
+      setCurrentPage('live');
+    }
   }, []);
 
   // Effet pour la logique WebSocket des utilisateurs actifs
   // Ce useEffect est maintenant au niveau supérieur et gère la connexion WebSocket
   useEffect(() => {
+    // Fonction pour gérer les messages entrants du WebSocket
+    const handleIncomingMessage = (data: any) => {
+      try {
+        if (data.type === 'user_count') {
+          setActiveUsers(data.count);
+        } else if (data.type === 'user_list') {
+          // Convertir les dates ISO en objets Date
+          const users = data.users.map((user: any) => ({
+            ...user,
+            connectTime: new Date(user.connectTime),
+            lastActivity: new Date(user.lastActivity),
+            muteEndTime: user.muteEndTime ? new Date(user.muteEndTime) : null
+          }));
+          setAllConnectedUsers(users);
+        } else if (data.type === 'chat_message' && data.message) {
+          // Ajouter le message de chat reçu à l'état global
+          const messageWithDateObject = {
+            ...data.message,
+            timestamp: new Date(data.message.timestamp)
+          };
+          setAllChatMessages(prev => [...prev.slice(-49), messageWithDateObject]);
+        } else if (data.type === 'banned') {
+          // L'utilisateur a été banni
+          alert('⚠️ ' + data.message);
+          // Déconnecter l'utilisateur
+          handleLogout();
+        } else if (data.type === 'muted') {
+          // L'utilisateur a été mute
+          alert('🔇 ' + data.message);
+        } else if (data.type === 'unmute_notification') {
+          // L'utilisateur n'est plus mute
+          alert('🔊 ' + data.message);
+        } else if (data.type === 'message_deleted') {
+          // Un message a été supprimé
+          setAllChatMessages(prev => prev.filter(msg => msg.id !== data.messageId));
+        } else if (data.type === 'auth_response') {
+          // Réponse d'authentification
+          console.log('Auth response received:', data); // Log pour le débogage
+          setIsLoading(false);
+          if (data.success) {
+            if (data.context === 'main_auth') {
+              // Authentification principale réussie
+              setIsAuthenticated(true);
+              setUserRole(data.role);
+              sessionStorage.setItem('authenticated', 'true');
+              sessionStorage.setItem('userRole', data.role);
+              setShowKeyError(false);
+              setAuthError('');
+            } else if (data.context === 'admin_access') {
+              // Accès admin réussi
+              setAdminAccess(true);
+              setUserRole('admin');
+              sessionStorage.setItem('adminAccess', 'true');
+              sessionStorage.setItem('userRole', 'admin');
+              setShowAdminPrompt(false);
+              setCurrentPage('admin');
+              setAuthError('');
+            } else if (data.context === 'mod_auth') {
+              // Authentification modérateur réussie (sera gérée par LiveStreamPage)
+              setUserRole(data.role);
+              setAuthError('');
+            }
+          } else {
+            // Authentification échouée
+            if (data.context === 'main_auth') {
+              setShowKeyError(true);
+              setAuthError(data.message || 'Clé d\'authentification incorrecte.');
+              setTimeout(() => setShowKeyError(false), 4000);
+            } else if (data.context === 'admin_access') {
+              setAuthError(data.message || 'Code administrateur incorrect.');
+              setTimeout(() => setAuthError(''), 5000);
+            } else if (data.context === 'mod_auth') {
+              setAuthError(data.message || 'Mot de passe modérateur incorrect.');
+              setTimeout(() => setAuthError(''), 5000);
+            }
+          }
+        } else if (data.type === 'login_response') {
+          // Réponse de connexion
+          setIsLoading(false);
+          if (data.success) {
+            setIsAuthenticated(true);
+            setCurrentUser(data.user);
+            setUserRole(data.user.role);
+            setCurrentUsername(data.user.username);
+            sessionStorage.setItem('authenticated', 'true');
+            sessionStorage.setItem('currentUser', JSON.stringify(data.user));
+            sessionStorage.setItem('userRole', data.user.role);
+            setAuthError('');
+            setAuthSuccess('Connexion réussie ! Bienvenue ' + data.user.username);
+            setTimeout(() => setAuthSuccess(''), 3000);
+          } else {
+            setAuthError(data.message || 'Erreur de connexion');
+            setTimeout(() => setAuthError(''), 5000);
+          }
+        } else if (data.type === 'register_response') {
+          // Réponse d'inscription
+          setIsLoading(false);
+          if (data.success) {
+            setAuthSuccess('Compte créé avec succès ! Vous pouvez maintenant vous connecter.');
+            setTimeout(() => setAuthSuccess(''), 5000);
+          } else {
+            setAuthError(data.message || 'Erreur lors de la création du compte');
+            setTimeout(() => setAuthError(''), 5000);
+          }
+        } else if (data.type === 'mute_notification') {
+          // Notification de mute (quand l'utilisateur essaie d'envoyer un message)
+          console.log('Mute notification:', data.message);
+        } else if (data.type === 'stream_status') {
+          // Mise à jour du statut du stream
+          setLiveStreamActive(data.status === 'live');
+        }
+      } catch (error) {
+        console.error('Error processing WebSocket message:', error);
+      }
+    };
+
     try {
-      const wsService = new WebSocketService();
+      const wsService = new WebSocketService(handleIncomingMessage);
       wsService.connect();
       setWsServiceInstance(wsService);
 
-      if (wsService.ws) {
-        wsService.ws.onmessage = (event) => {
-          try {
-            console.log('Received WebSocket message:', event.data);
-            const data = JSON.parse(event.data);
-            
-            if (data.type === 'user_count') {
-              setActiveUsers(data.count);
-            } else if (data.type === 'user_list') {
-              // Convertir les dates ISO en objets Date
-              const users = data.users.map((user: any) => ({
-                ...user,
-                connectTime: new Date(user.connectTime),
-                lastActivity: new Date(user.lastActivity)
-              }));
-              setAllConnectedUsers(users);
-            } else if (data.type === 'chat_message' && data.message) {
-              // Ajouter le message de chat reçu à l'état global
-              const messageWithDateObject = {
-                ...data.message,
-                timestamp: new Date(data.message.timestamp)
-              };
-              setAllChatMessages(prev => [...prev.slice(-49), messageWithDateObject]);
-            } else if (data.type === 'banned') {
-              // L'utilisateur a été banni
-              alert('⚠️ ' + data.message);
-              // Déconnecter l'utilisateur
-              handleLogout();
-            }
-          } catch (error) {
-            console.error('Error processing WebSocket message:', error);
-          }
-        };
-        
-        wsService.ws.onerror = (error) => {
-          console.error('WebSocket error:', error);
-        };
-        
-        wsService.ws.onclose = (event) => {
-          console.log('WebSocket closed:', event.code, event.reason);
-        };
-      }
 
       return () => {
         try {
-          if (wsService.ws) {
-            wsService.ws.close();
-          }
+          wsService.disconnect();
         } catch (error) {
           console.error('Error closing WebSocket:', error);
         }
@@ -146,6 +229,37 @@ function App() {
   // Fonction pour mettre à jour le nom d'utilisateur actuel
   const updateCurrentUsername = (username: string) => {
     setCurrentUsername(username);
+  };
+
+  // Fonctions d'authentification
+  const handleLogin = async (username: string, password: string) => {
+    if (!wsServiceInstance) {
+      setAuthError('Erreur de connexion au serveur');
+      setTimeout(() => setAuthError(''), 3000);
+      return;
+    }
+
+    setIsLoading(true);
+    setAuthError('');
+    setAuthSuccess('');
+
+    // Envoyer la requête de connexion au serveur
+    wsServiceInstance.sendLogin(username, password);
+  };
+
+  const handleRegister = async (username: string, password: string) => {
+    if (!wsServiceInstance) {
+      setAuthError('Erreur de connexion au serveur');
+      setTimeout(() => setAuthError(''), 3000);
+      return;
+    }
+
+    setIsLoading(true);
+    setAuthError('');
+    setAuthSuccess('');
+
+    // Envoyer la requête d'inscription au serveur
+    wsServiceInstance.sendRegister(username, password);
   };
 
   // Effet pour vérifier les popups actives
@@ -168,10 +282,21 @@ function App() {
 
   // Fonctions de modération centralisées
   const handleDeleteChatMessage = (messageId: string) => {
-    setAllChatMessages(prev => prev.filter(msg => msg.id !== messageId));
+    // Envoyer la demande de suppression au serveur
+    if (wsServiceInstance) {
+      wsServiceInstance.sendDeleteMessage(messageId);
+    }
+    // La suppression locale sera gérée par le message WebSocket de retour
   };
 
   const handleMuteChatUser = (targetUsername: string, moderatorUsername: string) => {
+    // Trouver l'utilisateur cible
+    const targetUser = allConnectedUsers.find(user => user.username === targetUsername);
+    if (targetUser && wsServiceInstance) {
+      // Envoyer l'action de mute au serveur
+      wsServiceInstance.sendAdminAction('mute_user', targetUser.id, targetUsername);
+    }
+    
     const systemMessage: ChatMessage = {
       id: Date.now().toString(),
       username: 'StreamBot',
@@ -185,6 +310,13 @@ function App() {
   };
 
   const handleBanChatUser = (targetUsername: string, moderatorUsername: string) => {
+    // Trouver l'utilisateur cible
+    const targetUser = allConnectedUsers.find(user => user.username === targetUsername);
+    if (targetUser && wsServiceInstance) {
+      // Envoyer l'action de ban au serveur
+      wsServiceInstance.sendAdminAction('ban_user', targetUser.id, targetUsername);
+    }
+    
     // Supprimer tous les messages de l'utilisateur banni
     setAllChatMessages(prev => prev.filter(msg => msg.username !== targetUsername));
     
@@ -236,48 +368,35 @@ function App() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [adminAccess]);
 
-  const handleKeySubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsLoading(true);
-    
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    if (keyInput === ENCRYPTION_KEY) {
-      setIsAuthenticated(true);
-      sessionStorage.setItem('authenticated', 'true');
-      setShowKeyError(false);
-    } else {
-      setShowKeyError(true);
-      setTimeout(() => setShowKeyError(false), 4000);
-    }
-    setKeyInput('');
-    setIsLoading(false);
-  };
-
   const handleAdminAccess = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     
     await new Promise(resolve => setTimeout(resolve, 1000));
     
-    if (adminCode === ADMIN_ACCESS_CODE) {
-      setAdminAccess(true);
-      sessionStorage.setItem('adminAccess', 'true');
-      setShowAdminPrompt(false);
-      setCurrentPage('admin');
+    // Envoyer la demande d'authentification admin au serveur
+    if (wsServiceInstance) {
+      console.log('Client sending admin code:', adminCode); // Log pour le débogage
+      wsServiceInstance.sendAuthentication('admin_access', 'admin', adminCode);
     } else {
-      setShowKeyError(true);
-      setTimeout(() => setShowKeyError(false), 3000);
+      setAuthError('Erreur de connexion au serveur');
+      setTimeout(() => setAuthError(''), 3000);
+      setIsLoading(false);
     }
+    
     setAdminCode('');
-    setIsLoading(false);
   };
 
   const handleLogout = () => {
     setIsAuthenticated(false);
+    setCurrentUser(null);
     setAdminAccess(false);
+    setCurrentUsername('');
+    setUserRole('viewer');
     sessionStorage.removeItem('authenticated');
+    sessionStorage.removeItem('currentUser');
     sessionStorage.removeItem('adminAccess');
+    sessionStorage.removeItem('userRole');
     setCurrentPage('home');
   };
 
@@ -306,11 +425,11 @@ function App() {
               />
             </div>
             
-            {showKeyError && (
+            {authError && (
               <div className="bg-red-500/20 border border-red-500/30 rounded-2xl p-4 text-red-300 text-sm animate-in slide-in-from-top-2 duration-300">
                 <div className="flex items-center space-x-2">
                   <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
-                  <span>Code d'accès invalide</span>
+                  <span>{authError}</span>
                 </div>
               </div>
             )}
@@ -345,186 +464,18 @@ function App() {
   }
 
   if (!isAuthenticated) {
+
+
+
+
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 relative overflow-hidden">
-        {/* Éléments de fond animés */}
-        <div className="absolute inset-0 overflow-hidden">
-          <div className="absolute -top-40 -right-40 w-80 h-80 bg-purple-500/10 rounded-full blur-3xl animate-pulse"></div>
-          <div className="absolute -bottom-40 -left-40 w-80 h-80 bg-cyan-500/10 rounded-full blur-3xl animate-pulse delay-1000"></div>
-          <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-96 h-96 bg-indigo-500/5 rounded-full blur-3xl animate-pulse delay-500"></div>
-          
-          {/* Grille de points */}
-          <div className="absolute inset-0 bg-[radial-gradient(circle_at_1px_1px,rgba(255,255,255,0.05)_1px,transparent_0)] bg-[length:50px_50px]"></div>
-          
-          {/* Particules flottantes */}
-          <div className="absolute inset-0">
-            {[...Array(20)].map((_, i) => (
-              <div
-                key={i}
-                className="absolute w-1 h-1 bg-white/20 rounded-full animate-float"
-                style={{
-                  left: `${Math.random() * 100}%`,
-                  top: `${Math.random() * 100}%`,
-                  animationDelay: `${Math.random() * 5}s`,
-                  animationDuration: `${3 + Math.random() * 4}s`
-                }}
-              />
-            ))}
-          </div>
-        </div>
-
-        <div className="relative z-10 flex items-center justify-center min-h-screen p-6">
-          <div className="w-full max-w-6xl">
-            <div className="grid lg:grid-cols-2 gap-12 items-center">
-              {/* Section gauche - Informations */}
-              <div className="text-center lg:text-left animate-in slide-in-from-left-8 duration-700">
-                <div className="inline-flex items-center bg-white/5 backdrop-blur-sm border border-white/10 rounded-full px-4 py-2 mb-8 animate-in fade-in-0 duration-500 delay-200">
-                  <div className="w-2 h-2 bg-green-400 rounded-full mr-3 animate-pulse"></div>
-                  <span className="text-white/90 text-sm font-medium">Plateforme sécurisée et anonyme</span>
-                </div>
-                
-                <h1 className="text-5xl lg:text-6xl font-bold text-white mb-6 leading-tight animate-in slide-in-from-bottom-4 duration-700 delay-300">
-                  ABD
-                  <span className="text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 via-purple-400 to-pink-400 block animate-gradient">
-                    LIVE
-                  </span>
-                </h1>
-                
-                <p className="text-xl text-slate-300 mb-8 leading-relaxed animate-in slide-in-from-bottom-4 duration-700 delay-500">
-                  La première plateforme de streaming entièrement privée. 
-                  Regardez nos émissions en toute tranquillité.
-                </p>
-                
-                {/* Statistiques */}
-                <div className="grid grid-cols-3 gap-6 mb-8 animate-in slide-in-from-bottom-4 duration-700 delay-700">
-                  <div className="text-center group">
-                    <div className="text-2xl font-bold text-white mb-1 group-hover:scale-110 transition-transform">256-bit</div>
-                    <div className="text-slate-400 text-sm">Chiffrement AES</div>
-                  </div>
-                  <div className="text-center group">
-                    <div className="text-2xl font-bold text-white mb-1 group-hover:scale-110 transition-transform">100%</div>
-                    <div className="text-slate-400 text-sm">Anonyme</div>
-                  </div>
-                  <div className="text-center group">
-                    <div className="text-2xl font-bold text-white mb-1 group-hover:scale-110 transition-transform">24/7</div>
-                    <div className="text-slate-400 text-sm">Disponible</div>
-                  </div>
-                </div>
-                
-                {/* Fonctionnalités */}
-                <div className="space-y-4 mb-8 animate-in slide-in-from-bottom-4 duration-700 delay-900">
-                  {[
-                    { icon: Shield, text: "Chiffrement de bout en bout" },
-                    { icon: Globe, text: "Accès mondial sans restriction" },
-                    { icon: Users, text: "Communauté anonyme active" },
-                    { icon: Star, text: "Qualité HD/4K garantie" }
-                  ].map((feature, index) => (
-                    <div key={index} className="flex items-center space-x-3 text-slate-300 group hover:text-white transition-colors">
-                      <div className="w-8 h-8 bg-gradient-to-r from-cyan-500/20 to-purple-500/20 rounded-lg flex items-center justify-center group-hover:scale-110 transition-transform">
-                        <feature.icon className="h-4 w-4 text-cyan-400" />
-                      </div>
-                      <span>{feature.text}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Section droite - Formulaire de connexion */}
-              <div className="lg:pl-12 animate-in slide-in-from-right-8 duration-700 delay-300">
-                <div className="bg-white/5 backdrop-blur-2xl border border-white/10 rounded-3xl p-8 shadow-2xl hover:bg-white/10 transition-all duration-500">
-                  <div className="text-center mb-8">
-                    <div className="w-16 h-16 bg-gradient-to-br from-cyan-500 to-purple-600 rounded-2xl flex items-center justify-center mx-auto mb-4 animate-pulse">
-                      <Lock className="h-8 w-8 text-white" />
-                    </div>
-                    <h2 className="text-2xl font-bold text-white mb-2">Accès Sécurisé</h2>
-                    <p className="text-slate-300">Entrez votre clé de déchiffrement</p>
-                  </div>
-                  
-                  <form onSubmit={handleKeySubmit} className="space-y-6">
-                    <div className="relative group">
-                      <input
-                        type={showPassword ? "text" : "password"}
-                        value={keyInput}
-                        onChange={(e) => setKeyInput(e.target.value)}
-                        placeholder="Clé de déchiffrement"
-                        className="w-full h-14 bg-white/5 border border-white/10 rounded-2xl px-6 pr-14 text-white placeholder-slate-400 focus:border-cyan-400 focus:outline-none focus:ring-4 focus:ring-cyan-400/20 transition-all group-hover:bg-white/10"
-                        disabled={isLoading}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors"
-                      >
-                        {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                      </button>
-                    </div>
-                    
-                    {showKeyError && (
-                      <div className="bg-red-500/20 border border-red-400/30 rounded-2xl p-4 text-red-300 text-sm backdrop-blur-sm animate-in slide-in-from-top-2 duration-300">
-                        <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 bg-red-400 rounded-full animate-pulse"></div>
-                          <span>Clé de déchiffrement invalide</span>
-                        </div>
-                      </div>
-                    )}
-                    
-                    <button
-                      type="submit"
-                      disabled={isLoading || !keyInput.trim()}
-                      className="w-full h-14 bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold rounded-2xl transition-all duration-300 flex items-center justify-center space-x-3 shadow-lg hover:shadow-xl transform hover:scale-[1.02] active:scale-[0.98]"
-                    >
-                      {isLoading ? (
-                        <>
-                          <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
-                          <span>Déchiffrement...</span>
-                        </>
-                      ) : (
-                        <>
-                          <Zap className="h-5 w-5" />
-                          <span>Accéder au contenu</span>
-                          <ArrowRight className="h-5 w-5" />
-                        </>
-                      )}
-                    </button>
-                  </form>
-
-                  {/* Informations de sécurité */}
-                  <div className="mt-8 pt-6 border-t border-white/10">
-                    <div className="grid grid-cols-2 gap-4 text-sm text-slate-400">
-                      <div className="flex items-center space-x-2 group hover:text-slate-300 transition-colors">
-                        <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
-                        <span>SSL/TLS</span>
-                      </div>
-                      <div className="flex items-center space-x-2 group hover:text-slate-300 transition-colors">
-                        <div className="w-2 h-2 bg-blue-400 rounded-full animate-pulse delay-300"></div>
-                        <span>Zero-Log</span>
-                      </div>
-                      <div className="flex items-center space-x-2 group hover:text-slate-300 transition-colors">
-                        <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse delay-600"></div>
-                        <span>P2P Sécurisé</span>
-                      </div>
-                      <div className="flex items-center space-x-2 group hover:text-slate-300 transition-colors">
-                        <div className="w-2 h-2 bg-cyan-400 rounded-full animate-pulse delay-900"></div>
-                        <span>Tor Compatible</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="text-center mt-16 animate-in fade-in-0 duration-700 delay-1000">
-              <div className="inline-flex items-center space-x-2 text-slate-400 group hover:text-slate-300 transition-colors">
-                <span className="text-sm">Développé avec</span>
-                <div className="w-4 h-4 bg-gradient-to-r from-red-500 to-pink-500 rounded-full animate-pulse group-hover:scale-110 transition-transform"></div>
-                <span className="text-sm">par</span>
-                <span className="text-purple-400 font-semibold">ley</span>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
+      <AuthPage
+        onLogin={handleLogin}
+        onRegister={handleRegister}
+        isLoading={isLoading}
+        error={authError}
+        success={authSuccess}
+      />
     );
   }
 
@@ -556,7 +507,7 @@ function App() {
               {[
                 { id: 'home', label: 'Accueil', icon: '🏠', action: () => setCurrentPage('home') },
                 { id: 'streams', label: 'Streams', icon: '📺', action: () => setCurrentPage('streams') },
-                { id: 'live', label: 'Live', icon: '🔴', action: () => setCurrentPage('live') }
+                { id: 'live', label: 'Chat', icon: '💬', action: () => setCurrentPage('live') }
               ].map((item) => (
                 <button
                   key={item.id}
@@ -622,13 +573,16 @@ function App() {
         {currentPage === 'live' && (
           <LiveStreamPage 
             allChatMessages={allChatMessages}
+            allConnectedUsers={allConnectedUsers}
             wsService={wsServiceInstance}
-            onUsernameSet={updateCurrentUsername}
+            currentUser={currentUser}
             onDeleteMessage={handleDeleteChatMessage}
             onMuteUser={handleMuteChatUser}
             onBanUser={handleBanChatUser}
             onReportMessage={handleReportMessage}
             onAddMessage={addChatMessage}
+            userRole={userRole}
+            streamKey={currentStreamKey}
           />
         )}
         {currentPage === 'admin' && (
@@ -639,6 +593,7 @@ function App() {
             onDeleteMessage={handleDeleteChatMessage}
             onMuteUser={handleMuteChatUser}
             onBanUser={handleBanChatUser}
+            liveStreamActive={liveStreamActive}
           />
         )}
         {currentPage === 'dmca' && <DMCAPage />}

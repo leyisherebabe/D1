@@ -146,7 +146,7 @@ const HomePage: React.FC<HomePageProps> = ({ activeUsers }) => { // Acceptez la 
             <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12 animate-in slide-in-from-bottom-4 duration-700 delay-700">
               <button className="group bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white px-8 py-4 rounded-2xl font-semibold text-lg transition-all transform hover:scale-105 flex items-center justify-center space-x-2 shadow-lg hover:shadow-2xl btn-glow">
                 <Rocket className="h-5 w-5 group-hover:animate-bounce" />
-                <span>Commencer l'Aventure</span>
+                <span>Rejoindre le Chat</span>
               </button>
               <button className="group bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 text-white px-8 py-4 rounded-2xl font-semibold text-lg transition-all flex items-center justify-center space-x-2 hover:border-white/20">
                 <Shield className="h-5 w-5 group-hover:rotate-12 transition-transform" />
@@ -322,10 +322,17 @@ const HomePage: React.FC<HomePageProps> = ({ activeUsers }) => { // Acceptez la 
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
               <button 
-                onClick={() => window.location.href = '/live'}
+                onClick={() => {
+                  // Si pas connecté, rediriger vers l'authentification
+                  if (!sessionStorage.getItem('authenticated')) {
+                    window.location.reload();
+                  } else {
+                    window.location.href = '/live';
+                  }
+                }}
                 className="bg-gradient-to-r from-cyan-500 to-purple-600 hover:from-cyan-600 hover:to-purple-700 text-white px-8 py-4 rounded-2xl font-semibold text-lg transition-all transform hover:scale-105 shadow-lg hover:shadow-2xl btn-glow"
               >
-                Commencer Maintenant
+                Rejoindre le Chat
               </button>
               <button 
                 onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
@@ -352,14 +359,14 @@ const HomePage: React.FC<HomePageProps> = ({ activeUsers }) => { // Acceptez la 
           {/* Liens légaux */}
           <div className="flex items-center justify-center space-x-6 mb-6">
             <button
-              onClick={() => setCurrentPage('legal')}
+              onClick={() => window.location.href = '/legal'}
               className="text-slate-500 hover:text-slate-300 text-sm transition-colors"
             >
               Mentions Légales
             </button>
             <span className="text-slate-700">•</span>
             <button
-              onClick={() => setCurrentPage('dmca')}
+              onClick={() => window.location.href = '/dmca'}
               className="text-slate-500 hover:text-slate-300 text-sm transition-colors"
             >
               Plainte DMCA

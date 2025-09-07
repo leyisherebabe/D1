@@ -37,6 +37,15 @@ export interface ConnectedUser {
   connectTime: Date;
   lastActivity: Date;
   page: string;
+  isMuted?: boolean;
+  muteEndTime?: Date;
+  muteCount?: number;
+  muteHistory?: Array<{
+    mutedAt: Date;
+    duration: number;
+    reason: string;
+  }>;
+  role?: 'viewer' | 'moderator' | 'admin' | 'owner';
 }
 
 export interface Report {
@@ -69,4 +78,18 @@ export interface Stream {
   category: string;
   quality: string;
   tags: string[];
+}
+
+export interface StreamKey {
+  id: string;
+  key: string;
+  title: string;
+  description: string;
+  thumbnail: string;
+  isActive: boolean;
+  createdBy: string;
+  createdAt: Date;
+  viewers: number;
+  startTime?: Date;
+  duration: number;
 }

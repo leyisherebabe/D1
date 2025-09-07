@@ -50,6 +50,11 @@ const ChatMessage: React.FC<ChatMessageProps> = ({
               ADMIN
             </span>
           )}
+          {message.ip && (userRole === 'admin' || userRole === 'moderator') && (
+            <span className="text-xs text-slate-500 font-mono bg-slate-800/50 px-2 py-1 rounded">
+              {message.ip}
+            </span>
+          )}
         </div>
         <div className="flex items-center space-x-2">
           <span className="text-xs text-slate-500 font-mono">
