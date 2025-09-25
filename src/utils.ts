@@ -37,7 +37,6 @@ export const validateM3U8Url = (url: string): boolean => {
 };
 
 export const encryptData = (data: string, key: string): string => {
-  // Implémentation simple de chiffrement (à remplacer par une vraie solution en production)
   return btoa(data + key);
 };
 

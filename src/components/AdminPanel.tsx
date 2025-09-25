@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Shield, Users, Activity, Settings, Plus, Trash2, Eye, Ban, VolumeX,
   Server, Lock, AlertTriangle, CheckCircle, XCircle, Play, Pause,
-  Monitor, Database, Wifi, Globe, Key, Crown, Zap
+  Monitor, Database, Wifi, Globe, Key, Crown, Zap, BarChart3, 
+  Radio, Layers, Terminal, FileVideo, Link, Save, X
 } from 'lucide-react';
 import { ConnectedUser, ChatMessage, StreamSource, SecurityLog } from '../types';
 import { formatTime, generateSecureId, validateM3U8Url, sanitizeInput } from '../utils';
@@ -28,6 +29,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   const [newSourceUrl, setNewSourceUrl] = useState('');
   const [newSourceName, setNewSourceName] = useState('');
   const [securityLogs, setSecurityLogs] = useState<SecurityLog[]>([]);
+  const [showAddForm, setShowAddForm] = useState(false);
   const [systemStats, setSystemStats] = useState({
     uptime: 0,
     totalConnections: 0,
@@ -75,7 +77,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     }
 
     if (!validateM3U8Url(newSourceUrl)) {
-      alert('URL invalide');
+      alert('URL invalide. Veuillez entrer une URL valide.');
       return;
     }
 
@@ -95,6 +97,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
     setNewSourceUrl('');
     setNewSourceName('');
+    setShowAddForm(false);
 
     // Log de sécurité
     addSecurityLog('STREAM_SOURCE_ADDED', `Nouvelle source ajoutée: ${newSource.name}`, 'medium');
@@ -133,283 +136,308 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     addSecurityLog('STREAM_SOURCE_DELETED', `Source supprimée: ${sourceToDelete?.name}`, 'medium');
   };
 
-  const banUser = (userId: string) => {
-    const user = connectedUsers.find(u => u.id === userId);
-    if (!user) return;
-
-    if (confirm(`Bannir ${user.username} ?`)) {
-      wsService?.sendAdminAction('ban_user', userId, user.username);
-      addSecurityLog('USER_BANNED', `Utilisateur banni: ${user.username}`, 'high');
-    }
-  };
-
-  const muteUser = (userId: string) => {
-    const user = connectedUsers.find(u => u.id === userId);
-    if (!user) return;
-
-    if (confirm(`Muter ${user.username} ?`)) {
-      wsService?.sendAdminAction('mute_user', userId, user.username);
-      addSecurityLog('USER_MUTED', `Utilisateur muté: ${user.username}`, 'medium');
-    }
-  };
-
-  const deleteMessage = (messageId: string) => {
-    wsService?.sendDeleteMessage(messageId);
-    addSecurityLog('MESSAGE_DELETED', `Message supprimé: ${messageId}`, 'low');
-  };
-
   const addSecurityLog = (action: string, details: string, severity: 'low' | 'medium' | 'high' | 'critical') => {
     const newLog: SecurityLog = {
       id: generateSecureId(),
       action,
       username: currentUser?.username,
-      ip: 'localhost', // À remplacer par la vraie IP
+      ip: 'localhost',
       timestamp: new Date(),
       details,
       severity
     };
 
-    const updatedLogs = [newLog, ...securityLogs].slice(0, 100); // Garder seulement les 100 derniers
+    const updatedLogs = [newLog, ...securityLogs].slice(0, 100);
     setSecurityLogs(updatedLogs);
     localStorage.setItem('securityLogs', JSON.stringify(updatedLogs));
   };
 
   const renderDashboard = () => (
     <div className="space-y-8">
-      {/* Statistiques */}
+      {/* Statistiques modernes */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
         {[
-          { label: 'Utilisateurs connectés', value: connectedUsers.length, icon: Users, color: 'from-blue-500 to-cyan-500' },
-          { label: 'Messages chat', value: chatMessages.length, icon: Activity, color: 'from-green-500 to-emerald-500' },
-          { label: 'Sources actives', value: streamSources.filter(s => s.isActive).length, icon: Play, color: 'from-purple-500 to-pink-500' },
-          { label: 'Alertes sécurité', value: systemStats.securityAlerts, icon: AlertTriangle, color: 'from-red-500 to-orange-500' }
+          { 
+            label: 'Utilisateurs connectés', 
+            value: connectedUsers.length, 
+            icon: Users, 
+            color: 'from-blue-500 to-cyan-500',
+            bg: 'bg-blue-500/10',
+            border: 'border-blue-500/20'
+          },
+          { 
+            label: 'Messages chat', 
+            value: chatMessages.length, 
+            icon: Activity, 
+            color: 'from-emerald-500 to-green-500',
+            bg: 'bg-emerald-500/10',
+            border: 'border-emerald-500/20'
+          },
+          { 
+            label: 'Sources actives', 
+            value: streamSources.filter(s => s.isActive).length, 
+            icon: Radio, 
+            color: 'from-violet-500 to-purple-500',
+            bg: 'bg-violet-500/10',
+            border: 'border-violet-500/20'
+          },
+          { 
+            label: 'Alertes sécurité', 
+            value: systemStats.securityAlerts, 
+            icon: AlertTriangle, 
+            color: 'from-red-500 to-orange-500',
+            bg: 'bg-red-500/10',
+            border: 'border-red-500/20'
+          }
         ].map((stat, index) => (
-          <div key={index} className="bg-slate-900/50 border border-slate-700 rounded-2xl p-6">
-            <div className={`w-12 h-12 bg-gradient-to-r ${stat.color} rounded-xl flex items-center justify-center mb-4`}>
-              <stat.icon className="h-6 w-6 text-white" />
+          <div key={index} className={`${stat.bg} backdrop-blur-sm border ${stat.border} rounded-2xl p-6 hover:scale-105 transition-all duration-300`}>
+            <div className={`w-14 h-14 bg-gradient-to-r ${stat.color} rounded-2xl flex items-center justify-center mb-4 shadow-lg`}>
+              <stat.icon className="h-7 w-7 text-white" />
             </div>
             <div className="text-3xl font-bold text-white mb-2">{stat.value}</div>
-            <div className="text-slate-400 text-sm">{stat.label}</div>
+            <div className="text-slate-400 text-sm font-medium">{stat.label}</div>
           </div>
         ))}
       </div>
 
-      {/* État du système */}
-      <div className="bg-slate-900/50 border border-slate-700 rounded-2xl p-8">
-        <h3 className="text-2xl font-semibold text-white mb-6 flex items-center">
-          <Server className="h-6 w-6 mr-3 text-green-400" />
+      {/* État du système moderne */}
+      <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-3xl p-8">
+        <h3 className="text-2xl font-bold text-white mb-8 flex items-center">
+          <Server className="h-7 w-7 mr-3 text-emerald-400" />
           État du Système
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="text-center">
-            <div className="w-16 h-16 bg-green-500/20 border border-green-500/30 rounded-full flex items-center justify-center mx-auto mb-4">
-              <CheckCircle className="h-8 w-8 text-green-400" />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="text-center group hover:scale-105 transition-all duration-300">
+            <div className="w-20 h-20 bg-emerald-500/10 backdrop-blur-sm border border-emerald-500/30 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:shadow-lg group-hover:shadow-emerald-500/25">
+              <CheckCircle className="h-10 w-10 text-emerald-400" />
             </div>
-            <h4 className="text-lg font-semibold text-white mb-2">Serveur WebSocket</h4>
-            <p className="text-green-400">En ligne</p>
+            <h4 className="text-xl font-bold text-white mb-3">Serveur WebSocket</h4>
+            <div className="px-4 py-2 bg-emerald-500/20 border border-emerald-500/30 rounded-xl">
+              <p className="text-emerald-400 font-semibold">En ligne</p>
+            </div>
           </div>
-          <div className="text-center">
-            <div className="w-16 h-16 bg-blue-500/20 border border-blue-500/30 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Database className="h-8 w-8 text-blue-400" />
+          <div className="text-center group hover:scale-105 transition-all duration-300">
+            <div className="w-20 h-20 bg-blue-500/10 backdrop-blur-sm border border-blue-500/30 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:shadow-lg group-hover:shadow-blue-500/25">
+              <Database className="h-10 w-10 text-blue-400" />
             </div>
-            <h4 className="text-lg font-semibold text-white mb-2">Base de données</h4>
-            <p className="text-blue-400">Connectée</p>
+            <h4 className="text-xl font-bold text-white mb-3">Base de données</h4>
+            <div className="px-4 py-2 bg-blue-500/20 border border-blue-500/30 rounded-xl">
+              <p className="text-blue-400 font-semibold">Connectée</p>
+            </div>
           </div>
-          <div className="text-center">
-            <div className="w-16 h-16 bg-purple-500/20 border border-purple-500/30 rounded-full flex items-center justify-center mx-auto mb-4">
-              <Wifi className="h-8 w-8 text-purple-400" />
+          <div className="text-center group hover:scale-105 transition-all duration-300">
+            <div className="w-20 h-20 bg-violet-500/10 backdrop-blur-sm border border-violet-500/30 rounded-2xl flex items-center justify-center mx-auto mb-6 group-hover:shadow-lg group-hover:shadow-violet-500/25">
+              <Radio className="h-10 w-10 text-violet-400" />
             </div>
-            <h4 className="text-lg font-semibold text-white mb-2">Streaming</h4>
-            <p className={activeSource ? "text-green-400" : "text-slate-400"}>
-              {activeSource ? 'Actif' : 'Inactif'}
-            </p>
+            <h4 className="text-xl font-bold text-white mb-3">Streaming</h4>
+            <div className={`px-4 py-2 rounded-xl border ${activeSource ? 'bg-emerald-500/20 border-emerald-500/30' : 'bg-slate-500/20 border-slate-500/30'}`}>
+              <p className={activeSource ? "text-emerald-400 font-semibold" : "text-slate-400 font-semibold"}>
+                {activeSource ? 'Actif' : 'Inactif'}
+              </p>
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  );
 
-  const renderUsers = () => (
-    <div className="bg-slate-900/50 border border-slate-700 rounded-2xl p-8">
-      <h3 className="text-2xl font-semibold text-white mb-6">Gestion des Utilisateurs</h3>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-slate-700">
-              <th className="text-left text-slate-400 py-3">Utilisateur</th>
-              <th className="text-left text-slate-400 py-3">Rôle</th>
-              <th className="text-left text-slate-400 py-3">IP</th>
-              <th className="text-left text-slate-400 py-3">Connecté depuis</th>
-              <th className="text-left text-slate-400 py-3">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {connectedUsers.map((user) => (
-              <tr key={user.id} className="border-b border-slate-800 hover:bg-slate-800/30">
-                <td className="py-4">
-                  <div className="flex items-center space-x-3">
-                    <div className="w-8 h-8 bg-gradient-to-r from-cyan-500 to-purple-600 rounded-full flex items-center justify-center">
-                      <span className="text-white text-sm font-semibold">
-                        {user.username.charAt(0).toUpperCase()}
-                      </span>
-                    </div>
-                    <span className="text-white font-medium">{user.username}</span>
-                  </div>
-                </td>
-                <td className="py-4">
-                  <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                    user.role === 'admin' ? 'bg-red-500/20 text-red-400' :
-                    user.role === 'moderator' ? 'bg-purple-500/20 text-purple-400' :
-                    'bg-slate-500/20 text-slate-400'
-                  }`}>
-                    {user.role.toUpperCase()}
-                  </span>
-                </td>
-                <td className="py-4 text-slate-300 font-mono text-sm">{user.ip}</td>
-                <td className="py-4 text-slate-400 text-sm">
-                  {formatTime(user.connectTime)}
-                </td>
-                <td className="py-4">
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => muteUser(user.id)}
-                      className="text-orange-400 hover:text-orange-300 p-2 rounded-lg hover:bg-orange-500/10 transition-all"
-                      title="Muter"
-                    >
-                      <VolumeX className="h-4 w-4" />
-                    </button>
-                    <button
-                      onClick={() => banUser(user.id)}
-                      className="text-red-400 hover:text-red-300 p-2 rounded-lg hover:bg-red-500/10 transition-all"
-                      title="Bannir"
-                    >
-                      <Ban className="h-4 w-4" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Graphique d'activité (simulé) */}
+      <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-3xl p-8">
+        <h3 className="text-2xl font-bold text-white mb-6 flex items-center">
+          <BarChart3 className="h-7 w-7 mr-3 text-violet-400" />
+          Activité en Temps Réel
+        </h3>
+        <div className="h-32 bg-slate-800/50 rounded-2xl flex items-end justify-center space-x-2 p-4">
+          {[...Array(12)].map((_, i) => (
+            <div
+              key={i}
+              className="bg-gradient-to-t from-violet-500 to-fuchsia-500 rounded-t-lg animate-pulse"
+              style={{
+                height: `${Math.random() * 80 + 20}%`,
+                width: '20px',
+                animationDelay: `${i * 0.1}s`
+              }}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
 
   const renderStreams = () => (
     <div className="space-y-8">
-      {/* Ajouter une nouvelle source */}
-      <div className="bg-slate-900/50 border border-slate-700 rounded-2xl p-8">
-        <h3 className="text-2xl font-semibold text-white mb-6 flex items-center">
-          <Plus className="h-6 w-6 mr-3 text-green-400" />
-          Ajouter une Source de Stream
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              Nom de la source
-            </label>
-            <input
-              type="text"
-              value={newSourceName}
-              onChange={(e) => setNewSourceName(e.target.value)}
-              placeholder="Ex: Stream Principal"
-              className="w-full h-12 bg-slate-800 border border-slate-600 rounded-xl px-4 text-white placeholder-slate-400 focus:border-cyan-400 focus:outline-none focus:ring-4 focus:ring-cyan-400/20 transition-all"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">
-              URL du flux (.m3u8, .mp4, etc.)
-            </label>
-            <input
-              type="url"
-              value={newSourceUrl}
-              onChange={(e) => setNewSourceUrl(e.target.value)}
-              placeholder="https://exemple.com/stream.m3u8"
-              className="w-full h-12 bg-slate-800 border border-slate-600 rounded-xl px-4 text-white placeholder-slate-400 focus:border-cyan-400 focus:outline-none focus:ring-4 focus:ring-cyan-400/20 transition-all"
-            />
-          </div>
+      {/* Header avec bouton d'ajout */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold text-white mb-2">Gestion des Sources</h2>
+          <p className="text-slate-400">Gérez vos flux de streaming M3U8</p>
         </div>
         <button
-          onClick={addStreamSource}
-          className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-6 py-3 rounded-xl font-medium transition-all transform hover:scale-105"
+          onClick={() => setShowAddForm(true)}
+          className="bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white px-6 py-3 rounded-2xl font-semibold transition-all transform hover:scale-105 shadow-lg flex items-center space-x-2"
         >
-          Ajouter la Source
+          <Plus className="h-5 w-5" />
+          <span>Ajouter une Source</span>
         </button>
       </div>
 
-      {/* Liste des sources */}
-      <div className="bg-slate-900/50 border border-slate-700 rounded-2xl p-8">
-        <h3 className="text-2xl font-semibold text-white mb-6">Sources de Stream</h3>
-        <div className="space-y-4">
-          {streamSources.map((source) => (
-            <div key={source.id} className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
-              <div className="flex items-center justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-3 mb-2">
-                    <h4 className="text-lg font-semibold text-white">{source.name}</h4>
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${
-                      source.isActive ? 'bg-green-500/20 text-green-400' : 'bg-slate-500/20 text-slate-400'
-                    }`}>
-                      {source.isActive ? 'ACTIF' : 'INACTIF'}
-                    </span>
-                    <span className="px-3 py-1 bg-blue-500/20 text-blue-400 rounded-full text-xs font-medium">
-                      {source.type.toUpperCase()}
-                    </span>
-                  </div>
-                  <p className="text-slate-400 text-sm mb-2">{source.url}</p>
-                  <p className="text-slate-500 text-xs">
-                    Créé par {source.createdBy} le {formatTime(source.createdAt)}
-                  </p>
-                </div>
-                <div className="flex items-center space-x-3">
-                  <button
-                    onClick={() => toggleStreamSource(source.id)}
-                    className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                      source.isActive 
-                        ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30' 
-                        : 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                    }`}
-                  >
-                    {source.isActive ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                  </button>
-                  <button
-                    onClick={() => deleteStreamSource(source.id)}
-                    className="text-red-400 hover:text-red-300 p-2 rounded-lg hover:bg-red-500/10 transition-all"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+      {/* Modal d'ajout */}
+      {showAddForm && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-xl flex items-center justify-center p-6 z-50">
+          <div className="bg-slate-900/90 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-8 shadow-2xl max-w-md w-full">
+            <div className="flex items-center justify-between mb-8">
+              <h3 className="text-2xl font-bold text-white flex items-center">
+                <FileVideo className="h-7 w-7 mr-3 text-violet-400" />
+                Nouvelle Source
+              </h3>
+              <button
+                onClick={() => setShowAddForm(false)}
+                className="text-slate-400 hover:text-white transition-colors p-2 rounded-lg hover:bg-slate-800"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            
+            <div className="space-y-6">
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-3">
+                  Nom de la source
+                </label>
+                <input
+                  type="text"
+                  value={newSourceName}
+                  onChange={(e) => setNewSourceName(e.target.value)}
+                  placeholder="Ex: Stream Principal"
+                  className="w-full h-12 bg-slate-800/50 backdrop-blur-sm border border-slate-600/50 rounded-xl px-4 text-white placeholder-slate-400 focus:border-violet-400 focus:outline-none focus:ring-4 focus:ring-violet-400/20 transition-all"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-300 mb-3">
+                  URL du flux M3U8
+                </label>
+                <div className="relative">
+                  <input
+                    type="url"
+                    value={newSourceUrl}
+                    onChange={(e) => setNewSourceUrl(e.target.value)}
+                    placeholder="https://exemple.com/stream.m3u8"
+                    className="w-full h-12 bg-slate-800/50 backdrop-blur-sm border border-slate-600/50 rounded-xl px-4 pl-12 text-white placeholder-slate-400 focus:border-violet-400 focus:outline-none focus:ring-4 focus:ring-violet-400/20 transition-all"
+                  />
+                  <Link className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-slate-400" />
                 </div>
               </div>
             </div>
-          ))}
-          {streamSources.length === 0 && (
-            <div className="text-center py-12 text-slate-500">
-              <Monitor className="h-12 w-12 mx-auto mb-4" />
-              <p>Aucune source de stream configurée</p>
+            
+            <div className="flex space-x-4 mt-8">
+              <button
+                onClick={() => setShowAddForm(false)}
+                className="flex-1 bg-slate-700/50 hover:bg-slate-600/50 text-slate-300 py-3 px-4 rounded-xl font-semibold transition-all"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={addStreamSource}
+                disabled={!newSourceName.trim() || !newSourceUrl.trim()}
+                className="flex-1 bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 disabled:opacity-50 text-white py-3 px-4 rounded-xl font-semibold transition-all flex items-center justify-center space-x-2"
+              >
+                <Save className="h-5 w-5" />
+                <span>Ajouter</span>
+              </button>
             </div>
-          )}
+          </div>
         </div>
+      )}
+
+      {/* Liste des sources */}
+      <div className="grid grid-cols-1 gap-6">
+        {streamSources.map((source) => (
+          <div key={source.id} className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-2xl p-6 hover:scale-[1.02] transition-all duration-300">
+            <div className="flex items-center justify-between">
+              <div className="flex-1">
+                <div className="flex items-center space-x-4 mb-3">
+                  <div className="w-12 h-12 bg-gradient-to-br from-violet-500 to-fuchsia-500 rounded-xl flex items-center justify-center">
+                    <FileVideo className="h-6 w-6 text-white" />
+                  </div>
+                  <div>
+                    <h4 className="text-xl font-bold text-white">{source.name}</h4>
+                    <div className="flex items-center space-x-3 mt-1">
+                      <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
+                        source.isActive 
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30' 
+                          : 'bg-slate-500/20 text-slate-400 border border-slate-500/30'
+                      }`}>
+                        {source.isActive ? '🔴 ACTIF' : '⚫ INACTIF'}
+                      </span>
+                      <span className="px-3 py-1 bg-blue-500/20 text-blue-400 border border-blue-500/30 rounded-full text-xs font-semibold">
+                        {source.type.toUpperCase()}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+                <div className="bg-slate-800/50 rounded-xl p-3 mb-3">
+                  <p className="text-slate-300 text-sm font-mono break-all">{source.url}</p>
+                </div>
+                <p className="text-slate-500 text-sm">
+                  Créé par <span className="text-violet-400 font-semibold">{source.createdBy}</span> le {formatTime(source.createdAt)}
+                </p>
+              </div>
+              <div className="flex items-center space-x-3 ml-6">
+                <button
+                  onClick={() => toggleStreamSource(source.id)}
+                  className={`px-6 py-3 rounded-xl font-semibold transition-all transform hover:scale-105 flex items-center space-x-2 ${
+                    source.isActive 
+                      ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30 border border-red-500/30' 
+                      : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/30'
+                  }`}
+                >
+                  {source.isActive ? <Pause className="h-5 w-5" /> : <Play className="h-5 w-5" />}
+                  <span>{source.isActive ? 'Arrêter' : 'Démarrer'}</span>
+                </button>
+                <button
+                  onClick={() => deleteStreamSource(source.id)}
+                  className="text-red-400 hover:text-red-300 p-3 rounded-xl hover:bg-red-500/10 border border-red-500/20 transition-all transform hover:scale-105"
+                >
+                  <Trash2 className="h-5 w-5" />
+                </button>
+              </div>
+            </div>
+          </div>
+        ))}
+        
+        {streamSources.length === 0 && (
+          <div className="text-center py-16">
+            <div className="w-20 h-20 bg-slate-800/50 backdrop-blur-sm rounded-2xl flex items-center justify-center mx-auto mb-6">
+              <Monitor className="h-10 w-10 text-slate-500" />
+            </div>
+            <h3 className="text-2xl font-bold text-white mb-3">Aucune source configurée</h3>
+            <p className="text-slate-400 text-lg mb-8">Ajoutez votre première source de streaming M3U8</p>
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="bg-gradient-to-r from-violet-500 to-fuchsia-500 hover:from-violet-600 hover:to-fuchsia-600 text-white px-8 py-4 rounded-2xl font-semibold transition-all transform hover:scale-105 shadow-lg"
+            >
+              Ajouter une Source
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
 
   const renderSecurity = () => (
-    <div className="bg-slate-900/50 border border-slate-700 rounded-2xl p-8">
-      <h3 className="text-2xl font-semibold text-white mb-6 flex items-center">
-        <Shield className="h-6 w-6 mr-3 text-red-400" />
+    <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-3xl p-8">
+      <h3 className="text-2xl font-bold text-white mb-8 flex items-center">
+        <Shield className="h-7 w-7 mr-3 text-red-400" />
         Logs de Sécurité
       </h3>
       <div className="space-y-4 max-h-96 overflow-y-auto">
         {securityLogs.map((log) => (
-          <div key={log.id} className={`p-4 rounded-xl border ${
+          <div key={log.id} className={`p-4 rounded-xl border backdrop-blur-sm ${
             log.severity === 'critical' ? 'bg-red-500/10 border-red-500/30' :
             log.severity === 'high' ? 'bg-orange-500/10 border-orange-500/30' :
             log.severity === 'medium' ? 'bg-yellow-500/10 border-yellow-500/30' :
-            'bg-slate-800/50 border-slate-700'
+            'bg-slate-800/50 border-slate-700/50'
           }`}>
-            <div className="flex items-start justify-between mb-2">
+            <div className="flex items-start justify-between mb-3">
               <div className="flex items-center space-x-3">
-                <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
                   log.severity === 'critical' ? 'bg-red-500/20 text-red-400' :
                   log.severity === 'high' ? 'bg-orange-500/20 text-orange-400' :
                   log.severity === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
@@ -417,62 +445,65 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                 }`}>
                   {log.severity.toUpperCase()}
                 </span>
-                <span className="text-white font-medium">{log.action}</span>
+                <span className="text-white font-semibold">{log.action}</span>
               </div>
-              <span className="text-slate-500 text-sm">{formatTime(log.timestamp)}</span>
+              <span className="text-slate-500 text-sm font-mono">{formatTime(log.timestamp)}</span>
             </div>
-            <p className="text-slate-300 text-sm mb-2">{log.details}</p>
+            <p className="text-slate-300 text-sm mb-3">{log.details}</p>
             <div className="flex items-center space-x-4 text-xs text-slate-500">
-              {log.username && <span>Utilisateur: {log.username}</span>}
-              <span>IP: {log.ip}</span>
+              {log.username && <span>👤 {log.username}</span>}
+              <span>🌐 {log.ip}</span>
             </div>
           </div>
         ))}
         {securityLogs.length === 0 && (
-          <div className="text-center py-12 text-slate-500">
-            <Shield className="h-12 w-12 mx-auto mb-4" />
-            <p>Aucun log de sécurité</p>
+          <div className="text-center py-12">
+            <Shield className="h-12 w-12 mx-auto mb-4 text-slate-600" />
+            <p className="text-slate-500 text-lg">Aucun log de sécurité</p>
           </div>
         )}
       </div>
     </div>
   );
 
+  const tabs = [
+    { id: 'dashboard', label: 'Tableau de bord', icon: BarChart3 },
+    { id: 'streams', label: 'Sources Stream', icon: Radio },
+    { id: 'security', label: 'Sécurité', icon: Shield },
+    { id: 'settings', label: 'Paramètres', icon: Settings }
+  ];
+
   return (
-    <div className="min-h-screen bg-slate-950 p-6">
+    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* Header */}
+        {/* Header moderne */}
         <div className="mb-8">
-          <div className="bg-slate-900/50 border border-slate-700 rounded-3xl p-8">
-            <div className="flex items-center space-x-4">
-              <div className="w-16 h-16 bg-gradient-to-br from-red-500 to-orange-500 rounded-2xl flex items-center justify-center">
-                <Crown className="h-8 w-8 text-white" />
+          <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-700/50 rounded-3xl p-8 shadow-2xl">
+            <div className="flex items-center space-x-6">
+              <div className="w-20 h-20 bg-gradient-to-br from-red-500 via-orange-500 to-yellow-500 rounded-3xl flex items-center justify-center shadow-2xl shadow-orange-500/25">
+                <Crown className="h-10 w-10 text-white" />
               </div>
               <div>
-                <h1 className="text-4xl font-bold text-white">Panneau d'Administration</h1>
-                <p className="text-slate-400 text-lg">Gestion complète de la plateforme ABD Stream</p>
+                <h1 className="text-4xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-orange-400 to-yellow-400 mb-2">
+                  PANNEAU ADMIN
+                </h1>
+                <p className="text-slate-400 text-lg font-medium">Contrôle total de la plateforme ABD Stream</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* Navigation */}
-        <div className="bg-slate-900/50 border border-slate-700 rounded-2xl p-2 mb-8">
+        {/* Navigation moderne */}
+        <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-2 mb-8 shadow-xl">
           <div className="flex flex-wrap gap-2">
-            {[
-              { id: 'dashboard', label: 'Tableau de bord', icon: Activity },
-              { id: 'users', label: 'Utilisateurs', icon: Users },
-              { id: 'streams', label: 'Sources Stream', icon: Monitor },
-              { id: 'security', label: 'Sécurité', icon: Shield },
-              { id: 'settings', label: 'Paramètres', icon: Settings }
-            ].map((tab) => (
+            {tabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center space-x-2 px-6 py-3 rounded-xl font-medium transition-all transform hover:scale-105 ${
+                className={`flex items-center space-x-3 px-6 py-4 rounded-xl font-semibold transition-all transform hover:scale-105 ${
                   activeTab === tab.id
-                    ? 'bg-gradient-to-r from-red-500 to-orange-500 text-white shadow-lg'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                    ? 'bg-gradient-to-r from-violet-500 to-fuchsia-500 text-white shadow-lg shadow-violet-500/25'
+                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
                 }`}
               >
                 <tab.icon className="h-5 w-5" />
@@ -485,13 +516,18 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         {/* Contenu */}
         <div className="animate-in fade-in-0 duration-500">
           {activeTab === 'dashboard' && renderDashboard()}
-          {activeTab === 'users' && renderUsers()}
           {activeTab === 'streams' && renderStreams()}
           {activeTab === 'security' && renderSecurity()}
           {activeTab === 'settings' && (
-            <div className="bg-slate-900/50 border border-slate-700 rounded-2xl p-8">
-              <h3 className="text-2xl font-semibold text-white mb-6">Paramètres Système</h3>
-              <p className="text-slate-400">Fonctionnalités à venir...</p>
+            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-3xl p-8">
+              <h3 className="text-2xl font-bold text-white mb-6 flex items-center">
+                <Settings className="h-7 w-7 mr-3 text-slate-400" />
+                Paramètres Système
+              </h3>
+              <div className="text-center py-12">
+                <Terminal className="h-16 w-16 mx-auto mb-4 text-slate-600" />
+                <p className="text-slate-400 text-lg">Fonctionnalités à venir...</p>
+              </div>
             </div>
           )}
         </div>
