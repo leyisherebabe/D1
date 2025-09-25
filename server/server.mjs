@@ -33,6 +33,7 @@ const activeStreams = new Map(); // Map<streamKey, streamData>
 const streamViewers = new Map(); // Map<streamKey, Set<clientId>>
 const streamChatHistory = new Map(); // Map<streamKey, messages[]>
 const globalChatHistory = [];
+const globalConnectedUsers = new Set(); // Utilisateurs dans le chat global
 
 // Utilitaires
 function generateFingerprint(req, ws) {
@@ -288,7 +289,8 @@ wss.on('connection', async (ws, req) => {
             ...message.message,
             timestamp: new Date().toISOString(),
             ip: ip,
-            fingerprint: fingerprint
+            fingerprint: fingerprint,
+            streamKey: client.currentStream // Ajouter la clé de stream si applicable
           };
           
           // Ajouter à la base de données
@@ -298,28 +300,47 @@ wss.on('connection', async (ws, req) => {
             console.error('Erreur lors de l\'ajout du message:', error);
           }
           
-          // Déterminer si c'est un message global ou pour un stream spécifique
-          if (client.currentStream) {
+          // Déterminer le contexte du message
+          const targetStreamKey = message.streamKey || client.currentStream;
+          
+          if (targetStreamKey) {
             // Message pour un stream spécifique
-            chatMessage.streamKey = client.currentStream;
-            addMessageToHistory(chatMessage, client.currentStream);
-            broadcastToStream(client.currentStream, {
+            addMessageToHistory(chatMessage, targetStreamKey);
+            broadcastToStream(targetStreamKey, {
               type: 'chat_message',
               message: chatMessage
             });
           } else {
             // Message global
             addMessageToHistory(chatMessage);
-            broadcastToAll({
+            // Diffuser seulement aux utilisateurs dans le chat global
+            broadcastToGlobalChat({
               type: 'chat_message',
               message: chatMessage
             });
           }
           break;
           
+        case 'join_global_chat':
+          globalConnectedUsers.add(clientId);
+          client.currentStream = null;
+          
+          // Envoyer l'historique du chat global
+          ws.send(JSON.stringify({
+            type: 'global_chat_joined',
+            success: true,
+            chatHistory: globalChatHistory
+          }));
+          break;
+          
+        case 'leave_global_chat':
+          globalConnectedUsers.delete(clientId);
+          break;
+          
         case 'join_stream':
           const streamKey = message.streamKey;
           client.currentStream = streamKey;
+          globalConnectedUsers.delete(clientId); // Retirer du chat global
           
           // Ajouter aux viewers du stream
           if (!streamViewers.has(streamKey)) {
@@ -355,7 +376,8 @@ wss.on('connection', async (ws, req) => {
             type: 'stream_joined',
             success: true,
             stream: stream,
-            chatHistory: streamChatHistory.get(streamKey) || []
+            chatHistory: streamChatHistory.get(streamKey) || [],
+            streamKey: streamKey
           }));
           
           console.log(`[Stream] ${client.username || 'Anonyme'} a rejoint le stream ${streamKey}`);
@@ -363,7 +385,8 @@ wss.on('connection', async (ws, req) => {
           // Diffuser la mise à jour du nombre de viewers
           broadcastToAll({
             type: 'stream_updated',
-            stream: stream
+            stream: stream,
+            streamKey: streamKey
           });
           break;
           
@@ -381,11 +404,14 @@ wss.on('connection', async (ws, req) => {
                 // Diffuser la mise à jour
                 broadcastToAll({
                   type: 'stream_updated',
-                  stream: stream
+                  stream: stream,
+                  streamKey: client.currentStream
                 });
               }
             }
             client.currentStream = null;
+            // Rejoindre automatiquement le chat global
+            globalConnectedUsers.add(clientId);
           }
           break;
           
@@ -528,7 +554,8 @@ wss.on('connection', async (ws, req) => {
               
               broadcastToStream(client.currentStream, {
                 type: 'message_deleted',
-                messageId: message.messageId
+                messageId: message.messageId,
+                streamKey: client.currentStream
               });
             } else {
               const index = globalChatHistory.findIndex(msg => msg.id === message.messageId);
@@ -763,7 +790,8 @@ wss.on('connection', async (ws, req) => {
             // Diffuser la mise à jour
             broadcastToAll({
               type: 'stream_updated',
-              stream: stream
+              stream: stream,
+              streamKey: client.currentStream
             });
           }
         }
@@ -877,7 +905,8 @@ server.on('request', (req, res) => {
           // Diffuser la mise à jour à tous les clients
           broadcastToAll({
             type: 'stream_detected',
-            stream: streamData
+            stream: streamData,
+            streamKey: streamKey
           });
           
         } else if (data.action === 'stop') {
@@ -891,7 +920,8 @@ server.on('request', (req, res) => {
             // Diffuser l'arrêt du stream
             broadcastToAll({
               type: 'stream_ended',
-              streamKey: streamKey
+              streamKey: streamKey,
+              stream: stream
             });
             
             // Supprimer le stream après un délai
@@ -923,7 +953,11 @@ server.on('request', (req, res) => {
   
   // Route pour récupérer la liste des streams
   else if (req.url === '/api/streams' && req.method === 'GET') {
-    const streams = Array.from(activeStreams.values());
+    const streams = Array.from(activeStreams.values()).map(stream => ({
+      ...stream,
+      chatMessageCount: streamChatHistory.get(stream.key)?.length || 0,
+      viewerCount: streamViewers.get(stream.key)?.size || 0
+    }));
     res.writeHead(200, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ success: true, streams }));
   }
@@ -993,6 +1027,8 @@ server.on('request', (req, res) => {
       status: 'online',
       connectedUsers: connectedClients.size,
       activeStreams: activeStreams.size,
+      globalChatMessages: globalChatHistory.length,
+      streamChatMessages: Array.from(streamChatHistory.values()).reduce((total, history) => total + history.length, 0),
       uptime: process.uptime(),
       timestamp: new Date().toISOString()
     }));

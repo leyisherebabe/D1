@@ -7,6 +7,8 @@ export interface ChatMessage {
   isSystem?: boolean;
   color?: string;
   ip?: string;
+  streamKey?: string; // Identifiant du stream ou 'global' pour le chat global
+  chatType?: 'global' | 'stream' | string; // Type de chat pour différencier les contextes
 }
 
 export interface ChatUser {
@@ -92,4 +94,6 @@ export interface StreamKey {
   viewers: number;
   startTime?: Date;
   duration: number;
+  hasM3U8?: boolean; // Indique si un fichier M3U8 a été uploadé
+  hasM3U8?: boolean; // Indique si le fichier M3U8 a été uploadé
 }

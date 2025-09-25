@@ -26,7 +26,7 @@ export class WebSocketService {
       console.log('Current host:', host);
       console.log('Current protocol:', window.location.protocol);
       
-      if (host.includes('webcontainer-api.io') || host.includes('stackblitz.io')) {
+      if (host.includes('webcontainer-api.io') || host.includes('ws://localhost:3001')) {
         // Environnement WebContainer
         // Dans WebContainer, remplacer le port 5173 par 3001
         const wsHost = host.replace('-5173.', '-3001.');
