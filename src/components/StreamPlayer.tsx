@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useState } from 'react';
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, AlertTriangle, Loader, Monitor } from 'lucide-react';
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, TriangleAlert as AlertTriangle, Loader, Monitor } from 'lucide-react';
 import { StreamSource } from '../types';
 
 interface StreamPlayerProps {
