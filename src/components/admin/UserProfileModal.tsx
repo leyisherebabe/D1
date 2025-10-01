@@ -113,11 +113,19 @@ const UserProfileModal: React.FC<UserProfileModalProps> = ({ user, onClose }) =>
           <div className="space-y-2">
             <div className="flex justify-between">
               <span className="text-slate-400">Fingerprint</span>
-              <span className="font-mono text-sm">{user.fingerprint}</span>
+              <span className="font-mono text-sm">
+                {typeof user.fingerprint === 'object'
+                  ? JSON.stringify(user.fingerprint)
+                  : user.fingerprint || 'N/A'}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Socket ID</span>
-              <span className="font-mono text-sm">{user.socketId}</span>
+              <span className="font-mono text-sm">
+                {typeof user.socketId === 'object'
+                  ? JSON.stringify(user.socketId)
+                  : user.socketId || 'N/A'}
+              </span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-400">Page actuelle</span>

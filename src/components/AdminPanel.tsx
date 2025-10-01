@@ -5,15 +5,39 @@ import { formatTime } from '../utils';
 
 const UserProfileModal: React.FC<any> = ({ user, onClose }) => (
   <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-    <div className="bg-slate-900 rounded-2xl p-6 max-w-2xl w-full">
+    <div className="bg-slate-900 rounded-2xl p-6 max-w-2xl w-full max-h-[80vh] overflow-y-auto">
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-xl font-bold">Profil: {user.username}</h3>
         <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg"><X className="h-5 w-5" /></button>
       </div>
-      <div className="space-y-2">
-        <div>IP: {user.ip}</div>
-        <div>Role: {user.role}</div>
-        <div>Page: {user.page}</div>
+      <div className="space-y-3">
+        <div className="p-3 bg-slate-800/50 rounded-lg">
+          <div className="text-slate-400 text-sm">IP</div>
+          <div className="text-white">{user.ip}</div>
+        </div>
+        <div className="p-3 bg-slate-800/50 rounded-lg">
+          <div className="text-slate-400 text-sm">Rôle</div>
+          <div className="text-white">{user.role || 'viewer'}</div>
+        </div>
+        <div className="p-3 bg-slate-800/50 rounded-lg">
+          <div className="text-slate-400 text-sm">Page</div>
+          <div className="text-white">{user.page}</div>
+        </div>
+        {user.connectTime && (
+          <div className="p-3 bg-slate-800/50 rounded-lg">
+            <div className="text-slate-400 text-sm">Connecté depuis</div>
+            <div className="text-white">{new Date(user.connectTime).toLocaleString()}</div>
+          </div>
+        )}
+        {user.discord && typeof user.discord === 'object' && (
+          <div className="p-3 bg-slate-800/50 rounded-lg">
+            <div className="text-slate-400 text-sm">Discord</div>
+            <div className="text-white">
+              {user.discord.discord_username && <div>Username: {user.discord.discord_username}</div>}
+              {user.discord.expires_at && <div className="text-sm text-slate-400">Expire: {new Date(user.discord.expires_at).toLocaleString()}</div>}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   </div>
@@ -805,11 +829,15 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         </td>
                         <td className="px-6 py-4">
                           <span className={`px-3 py-1 rounded-full text-xs font-medium border ${roleColors[user.role as keyof typeof roleColors]}`}>
-                            {user.role}
+                            {typeof user.role === 'object' ? JSON.stringify(user.role) : (user.role || 'viewer')}
                           </span>
                         </td>
-                        <td className="px-6 py-4 text-slate-400">{user.ip}</td>
-                        <td className="px-6 py-4 text-slate-400">{user.page}</td>
+                        <td className="px-6 py-4 text-slate-400">
+                          {typeof user.ip === 'object' ? JSON.stringify(user.ip) : user.ip}
+                        </td>
+                        <td className="px-6 py-4 text-slate-400">
+                          {typeof user.page === 'object' ? JSON.stringify(user.page) : user.page}
+                        </td>
                         <td className="px-6 py-4 text-slate-400">
                           {new Date(user.connectTime).toLocaleTimeString()}
                         </td>
