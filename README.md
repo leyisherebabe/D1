@@ -334,5 +334,5 @@ Ce projet est sous licence MIT.
 
 ---
 
-**Version 5.0 - Architecture Supabase**
+**Version 5.0 - Ur best experience**
 *Plateforme de streaming moderne avec chat en temps réel*
