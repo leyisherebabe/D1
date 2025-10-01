@@ -2,7 +2,7 @@
 
 ## Vue d'ensemble
 
-Plateforme de streaming moderne avec support RTMP, chat en temps réel, et panel d'administration complet, propulsée par Supabase.
+Plateforme de streaming moderne avec support RTMP, chat en temps réel, et panel d'administration complet, 100% localhost avec SQLite.
 
 ## Stack Technique
 
@@ -11,128 +11,124 @@ Plateforme de streaming moderne avec support RTMP, chat en temps réel, et panel
 - **Vite** pour le build
 - **TailwindCSS** pour le styling
 - **Lucide React** pour les icônes
-- **Supabase JS Client** pour l'accès à la base de données
 - **HLS.js** pour la lecture des streams
+- **WebSocket** pour la communication temps réel
 
 ### Backend
 - **Node.js** avec ES Modules
-- **Express.js** pour l'API REST
 - **WebSocket (ws)** pour la communication temps réel
 - **Node Media Server** pour le serveur RTMP
-- **Supabase** comme base de données PostgreSQL
+- **SQLite3** comme base de données locale
+- **Discord.js** pour le bot Discord
 
 ### Base de Données
-- **Supabase PostgreSQL** avec Row Level Security (RLS)
-- **Realtime subscriptions** pour les mises à jour en direct
+- **SQLite3** - Base de données fichier locale (`server/data/app.db`)
+- **Aucun service cloud** - Toutes les données restent sur votre machine
+- **Discord Bot** - Seule connexion externe (nécessaire pour la génération de comptes)
 
 ## Architecture de la Base de Données
 
-### Tables
+### Tables SQLite
 
-#### `profiles`
+#### `users`
 ```sql
-- id (uuid, primary key)
+- id (text, primary key)
 - username (text, unique)
+- password_hash (text)
 - role (text) - viewer, moderator, admin
-- created_at (timestamptz)
-- last_login (timestamptz)
+- created_at (datetime)
+- last_login (datetime)
+- is_active (boolean)
+- discord_id (text) - ID Discord de l'utilisateur
+- discord_username (text) - Username Discord
+- expires_at (datetime) - Date d'expiration (comptes temporaires)
 ```
 
 #### `streams`
 ```sql
-- id (uuid, primary key)
+- id (integer, primary key autoincrement)
 - stream_key (text, unique)
 - title (text)
 - description (text)
-- thumbnail (text)
-- start_time (timestamptz)
-- end_time (timestamptz)
+- started_at (datetime)
+- ended_at (datetime)
 - is_live (boolean)
-- rtmp_url (text)
-- hls_url (text)
-- viewer_count (integer)
-- created_by (uuid, foreign key)
-- created_at (timestamptz)
 ```
 
 #### `chat_messages`
 ```sql
-- id (uuid, primary key)
-- stream_id (uuid, foreign key, nullable)
-- user_id (uuid, foreign key, nullable)
+- id (text, primary key)
 - username (text)
 - message (text)
-- ip_address (text)
+- timestamp (datetime)
+- role (text)
+- is_system (boolean)
+- color (text)
+- ip (text)
 - fingerprint (text)
-- created_at (timestamptz)
+- stream_key (text)
 ```
 
 #### `connected_users`
 ```sql
-- id (uuid, primary key)
-- user_id (uuid, foreign key, nullable)
+- id (text, primary key)
 - username (text)
-- ip_address (text)
+- ip (text)
 - user_agent (text)
-- fingerprint (text)
+- connect_time (datetime)
+- last_activity (datetime)
 - page (text)
-- connected_at (timestamptz)
-- last_activity (timestamptz)
+- fingerprint (text)
 ```
 
 #### `banned_users`
 ```sql
-- id (uuid, primary key)
+- id (integer, primary key autoincrement)
 - fingerprint (text)
-- ip_address (text)
+- ip (text)
 - username (text)
+- banned_at (datetime)
+- ban_end_time (datetime)
 - reason (text)
-- banned_at (timestamptz)
 - banned_by (text)
 - is_permanent (boolean)
-- ban_end_time (timestamptz, nullable)
 ```
 
 #### `muted_users`
 ```sql
-- id (uuid, primary key)
+- id (integer, primary key autoincrement)
 - fingerprint (text)
 - username (text)
-- ip_address (text)
+- ip (text)
+- muted_at (datetime)
+- mute_end_time (datetime)
 - reason (text)
-- muted_at (timestamptz)
 - muted_by (text)
-- mute_end_time (timestamptz, nullable)
 - mute_count (integer)
+```
+
+#### `activity_logs`
+```sql
+- id (integer, primary key autoincrement)
+- action_type (text)
+- username (text)
+- ip_address (text)
+- fingerprint (text)
+- details (text) - JSON stringifié
+- severity (text)
+- admin_username (text)
+- created_at (datetime)
 ```
 
 ## Sécurité
 
-### Row Level Security (RLS)
+### Sécurité Base de Données
 
-Toutes les tables ont RLS activé avec des policies restrictives :
-
-**profiles**
-- Users peuvent lire tous les profils
-- Users peuvent modifier uniquement leur profil
-
-**streams**
-- Lecture pour tous les utilisateurs authentifiés
-- Création/modification pour admins/moderators uniquement
-
-**chat_messages**
-- Lecture pour tous
-- Insertion pour utilisateurs authentifiés
-- Suppression pour admins/moderators uniquement
-
-**connected_users**
-- Lecture pour admins/moderators uniquement
-
-**banned_users**
-- Lecture/écriture pour admins/moderators uniquement
-
-**muted_users**
-- Lecture/écriture pour admins/moderators uniquement
+- **SQLite local** - Pas d'exposition réseau de la base de données
+- **Fichier protégé** - Base de données stockée dans `server/data/app.db`
+- **Validation côté serveur** - Toutes les requêtes sont validées avant exécution
+- **Mots de passe hashés** - Utilisation de bcrypt avec salt rounds: 10
+- **Accès contrôlé** - Vérifications des rôles pour les actions admin/mod
 
 ### Sécurité Backend
 
@@ -146,10 +142,10 @@ Toutes les tables ont RLS activé avec des policies restrictives :
 
 ### 1. Connexion Utilisateur
 ```
-Client → WebSocket (ws://localhost:3000)
-→ Vérification ban (Supabase)
+Client → WebSocket (ws://localhost:3001)
+→ Vérification ban (SQLite)
 → Génération fingerprint
-→ Insertion dans connected_users (Supabase)
+→ Insertion dans connected_users (SQLite)
 → Broadcast user_count
 ```
 
@@ -158,25 +154,23 @@ Client → WebSocket (ws://localhost:3000)
 OBS → RTMP Server (port 1935)
 → FFmpeg conversion → HLS
 → Fichiers .m3u8/.ts dans server/media/
-→ Notification API REST → Backend
-→ Insertion dans streams (Supabase)
+→ Insertion dans streams (SQLite)
 → Broadcast stream_detected (WebSocket)
 ```
 
 ### 3. Chat Message
 ```
 Client → WebSocket
-→ Vérification mute (Supabase)
-→ Insertion dans chat_messages (Supabase)
+→ Vérification mute (SQLite)
+→ Insertion dans chat_messages (SQLite)
 → Broadcast aux viewers du stream
-→ Mise à jour Realtime (Supabase)
 ```
 
 ### 4. Panel Admin
 ```
-Admin Panel → Supabase Realtime subscriptions
-→ Mises à jour automatiques toutes les 5s
-→ Actions (ban/mute) → Supabase
+Admin Panel → WebSocket
+→ Mises à jour automatiques via WebSocket
+→ Actions (ban/mute) → SQLite
 → Broadcast via WebSocket
 ```
 
@@ -305,8 +299,21 @@ Admin Panel → Supabase Realtime subscriptions
 
 ## API REST
 
+### Discord Bot
+
+#### Génération de Comptes Temporaires
+```
+Utilisateur Discord → /account
+→ Vérification compte existant (SQLite)
+→ Génération username + password aléatoires
+→ Hash bcrypt du password
+→ Insertion dans users (SQLite)
+→ Envoi identifiants en DM Discord
+→ Expiration automatique après 24h
+```
+
 ### POST `/api/stream/detect`
-Notification de début/fin de stream RTMP
+Notification de début/fin de stream RTMP (non utilisé actuellement)
 
 **Request:**
 ```json
@@ -357,20 +364,33 @@ Statut du serveur
 ## Ports
 
 - **5173** : Frontend (Vite dev server)
-- **3000** : Backend WebSocket + API REST
+- **3001** : Backend WebSocket
 - **1935** : Serveur RTMP (OBS)
 - **8003** : Serveur HTTP pour fichiers HLS
 
 ## Variables d'Environnement
 
-### Frontend (.env)
+### Backend (server/.env)
 ```env
-VITE_SUPABASE_URL=https://xxx.supabase.co
-VITE_SUPABASE_SUPABASE_ANON_KEY=xxx
+# Clés de sécurité locale
+ENCRYPTION_KEY=BOLT_ANONYMOUS_2025
+ADMIN_ACCESS_CODE=ADMIN_BOLT_2025
+
+# Mots de passe des rôles
+MOD_PASSWORD=mod123
+MODERATOR_PASSWORD=moderator123
+ADMIN_PASSWORD=admin123
+
+# Configuration WebSocket
+WS_PORT=3001
+
+# Configuration Discord Bot
+DISCORD_BOT_TOKEN=your_discord_bot_token_here
+DISCORD_WEBHOOK_URL=
 ```
 
-### Backend
-Les variables sont injectées automatiquement depuis le frontend ou définies en fallback dans le code.
+### Frontend
+Aucune variable d'environnement requise pour le fonctionnement localhost.
 
 ## Configuration OBS
 
@@ -389,14 +409,15 @@ Profile: high
 
 ### Temps Réel
 - **WebSocket** : Latence < 50ms
-- **Supabase Realtime** : Mises à jour < 100ms
-- **Polling** : Toutes les 5 secondes pour le panel admin
+- **SQLite** : Requêtes < 10ms (fichier local)
+- **Broadcast** : Instantané via WebSocket
 
 ### Optimisations
 - Broadcast ciblé par stream pour le chat
-- Pagination des messages (50 derniers)
-- Index sur les colonnes fréquemment utilisées
+- SQLite en mode WAL (Write-Ahead Logging)
+- Index automatiques sur les colonnes PRIMARY KEY et UNIQUE
 - Cleanup automatique des connexions fermées
+- Cleanup automatique des comptes Discord expirés (toutes les 5min)
 
 ## Monitoring
 
@@ -404,13 +425,15 @@ Profile: high
 - Connexions/déconnexions WebSocket
 - Création/arrêt des streams
 - Actions d'administration
-- Erreurs de base de données
+- Erreurs de base de données SQLite
+- Création/expiration des comptes Discord
 
 ### Panel Admin
 - Utilisateurs connectés en temps réel
 - Streams actifs
 - Messages totaux
 - Utilisateurs bannis/mute
+- Logs d'activité (création/expiration comptes Discord, etc.)
 
 ## Déploiement
 
@@ -424,52 +447,74 @@ npm run build
 ```bash
 cd server
 npm install
-npm start  # Serveur principal
-npm run rtmp  # Serveur RTMP (terminal séparé)
+npm start        # Serveur WebSocket + RTMP
+npm run bot      # Bot Discord (terminal séparé)
+# OU
+npm run dev      # Serveur + Bot en même temps
 ```
 
-### Supabase
-- Base de données hébergée
-- Migrations déjà appliquées
-- RLS configuré
+### Base de Données
+- SQLite initialisé automatiquement au premier lancement
+- Fichier créé dans `server/data/app.db`
+- Aucune configuration supplémentaire nécessaire
 
 ## Maintenance
 
 ### Nettoyage Automatique
 - Mutes expirés supprimés périodiquement
 - Connexions fermées nettoyées
-- Streams inactifs archivés
+- Comptes Discord expirés supprimés automatiquement (toutes les 5min)
+- Logs d'expiration créés pour chaque compte supprimé
 
 ### Backups
-- Supabase effectue des backups automatiques
-- Point-in-time recovery disponible
+- Copier manuellement le fichier `server/data/app.db`
+- Possibilité d'utiliser SQLite backup API
+- Recommandé: backup régulier du dossier `server/data/`
 
 ## Scalabilité
 
-### Horizontal
-- Multiple instances du backend possible
-- Load balancer devant WebSocket
-- Supabase gère automatiquement la montée en charge
+### Limites SQLite
+- Conçu pour usage local/petit à moyen trafic
+- Excellentes performances en lecture
+- Écritures séquentielles (lock de fichier)
+- Recommandé pour < 1000 utilisateurs simultanés
 
-### Vertical
-- Augmenter les ressources Supabase
-- Optimiser les requêtes SQL
-- Ajouter des index si nécessaire
+### Migration Future
+- Si besoin de scale: migrer vers PostgreSQL
+- Structure de base de données compatible
+- Adapter les requêtes SQL si nécessaire
 
 ## Sécurité en Production
 
-- [ ] Utiliser HTTPS/WSS
-- [ ] Configurer un WAF
-- [ ] Rate limiting sur les endpoints
-- [ ] Rotation des clés Supabase
+- [ ] Utiliser HTTPS/WSS (certificat SSL)
+- [ ] Rate limiting sur WebSocket
+- [ ] Changer les mots de passe par défaut dans .env
+- [ ] Protéger le fichier `server/data/app.db` (permissions 600)
 - [ ] Monitoring des logs
 - [ ] Alertes pour activités suspectes
-- [ ] CORS restrictif en production
-- [ ] Chiffrement des données sensibles
+- [ ] Firewall pour limiter accès aux ports
+- [ ] Backups réguliers de la base SQLite
+- [ ] Ne JAMAIS commit le fichier .env dans Git
+
+## Connexions Externes
+
+**IMPORTANT** : Le système est 100% localhost sauf pour :
+
+1. **Bot Discord** (obligatoire)
+   - Connexion aux serveurs Discord pour le bot
+   - Nécessaire pour la génération de comptes temporaires via `/account`
+   - Aucune donnée utilisateur n'est envoyée à Discord (sauf Discord ID/username)
+
+2. **Aucune autre connexion cloud**
+   - Pas de Supabase
+   - Pas de services externes
+   - Toutes les données restent sur votre machine
 
 ## Support
 
 Pour toute question technique, consulter :
 - README.md pour l'installation
+- DISCORD_INTEGRATION.md pour le bot Discord
+- server/DISCORD_BOT_SETUP.md pour la configuration Discord
 - Ce document pour l'architecture
 - Code source pour l'implémentation détaillée

@@ -1,6 +1,6 @@
 # 🎥 ABD Stream - Plateforme de Streaming
 
-Une plateforme de streaming moderne avec chat en temps réel, support RTMP, et panel d'administration complet, propulsée par Supabase.
+Une plateforme de streaming moderne avec chat en temps réel, support RTMP, et panel d'administration complet, 100% localhost avec SQLite.
 
 ## ✨ Fonctionnalités
 
@@ -13,7 +13,7 @@ Une plateforme de streaming moderne avec chat en temps réel, support RTMP, et p
 ### 💬 Chat en Temps Réel
 - **Chat global** - Discussion générale de la plateforme
 - **Chat par stream** - Chat dédié pour chaque stream
-- **Historique persistant** - Stocké dans Supabase
+- **Historique persistant** - Stocké dans SQLite local
 - **Modération en direct** - Mute et ban en temps réel
 
 ### 👑 Panel Administrateur
@@ -23,18 +23,20 @@ Une plateforme de streaming moderne avec chat en temps réel, support RTMP, et p
 - **Logs de sécurité** - Toutes les actions sont enregistrées
 
 ### 🔒 Sécurité
-- **Supabase RLS** - Row Level Security sur toutes les tables
+- **Base locale SQLite** - Aucune exposition réseau de la base de données
 - **Authentification sécurisée** - Gestion des utilisateurs et rôles
 - **Protection anti-spam** - Système de mute progressif
 - **Fingerprinting** - Identification des utilisateurs
+- **Mots de passe hashés** - Bcrypt avec salt rounds: 10
 
 ## 🏗️ Architecture
 
 ### Backend
-- **Express.js** - Serveur API REST
+- **Node.js** - Serveur avec ES Modules
 - **WebSocket** - Communication en temps réel
 - **Node Media Server** - Serveur RTMP pour OBS
-- **Supabase** - Base de données PostgreSQL avec RLS
+- **SQLite3** - Base de données locale (`server/data/app.db`)
+- **Discord.js** - Bot Discord pour comptes temporaires
 
 ### Frontend
 - **React + TypeScript** - Interface utilisateur moderne
@@ -42,20 +44,21 @@ Une plateforme de streaming moderne avec chat en temps réel, support RTMP, et p
 - **TailwindCSS** - Styling
 - **HLS.js** - Lecture des streams
 
-### Base de Données (Supabase)
-- `profiles` - Profils utilisateurs
+### Base de Données (SQLite Local)
+- `users` - Utilisateurs et comptes Discord temporaires
 - `streams` - Streams actifs
 - `chat_messages` - Messages du chat
 - `connected_users` - Utilisateurs connectés
 - `banned_users` - Utilisateurs bannis
 - `muted_users` - Utilisateurs mute
+- `activity_logs` - Logs de toutes les actions (création/expiration comptes, etc.)
 
 ## 📋 Installation
 
 ### Prérequis
 - Node.js 18+
 - FFmpeg (pour la conversion RTMP vers HLS)
-- Compte Supabase (déjà configuré)
+- Bot Discord (optionnel, pour la génération de comptes temporaires)
 
 ### Installation
 
@@ -71,11 +74,34 @@ cd ..
 
 ### Configuration
 
-Le fichier `.env` contient la configuration Supabase :
+#### Backend (server/.env)
+
+Créez le fichier `server/.env` avec cette configuration :
+
 ```env
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_SUPABASE_ANON_KEY=your_supabase_anon_key
+# Clés de sécurité locale
+ENCRYPTION_KEY=BOLT_ANONYMOUS_2025
+ADMIN_ACCESS_CODE=ADMIN_BOLT_2025
+
+# Mots de passe des rôles
+MOD_PASSWORD=mod123
+MODERATOR_PASSWORD=moderator123
+ADMIN_PASSWORD=admin123
+
+# Configuration WebSocket
+WS_PORT=3001
+
+# Configuration Discord Bot (optionnel)
+# Pour obtenir un token: https://discord.com/developers/applications
+DISCORD_BOT_TOKEN=your_discord_bot_token_here
+DISCORD_WEBHOOK_URL=
 ```
+
+#### Frontend
+
+Aucune configuration nécessaire - tout fonctionne en localhost.
+
+**Note importante**: Si vous voulez utiliser le bot Discord pour générer des comptes temporaires, consultez `server/DISCORD_BOT_SETUP.md` pour la configuration complète.
 
 ## 🚀 Démarrage
 
@@ -87,18 +113,22 @@ Accessible sur http://localhost:5173
 
 ### Backend
 ```bash
-# Terminal 1 - Serveur WebSocket/API
 cd server
+
+# Option 1: Tout lancer en même temps (recommandé)
+npm run dev
+
+# Option 2: Lancer séparément
+# Terminal 1 - Serveur WebSocket + RTMP
 npm start
 
-# Terminal 2 - Serveur RTMP
-cd server
-npm run rtmp
+# Terminal 2 - Bot Discord (optionnel)
+npm run bot
 ```
 
 ### Ports Utilisés
 - **5173** - Frontend (Vite)
-- **3000** - Backend API + WebSocket
+- **3001** - Backend WebSocket
 - **1935** - Serveur RTMP (OBS)
 - **8003** - Serveur HTTP pour les fichiers HLS
 
@@ -135,10 +165,16 @@ streaming-platform/
 │   └── utils/                  # Utilitaires
 ├── server/                     # Backend Node.js
 │   ├── index.mjs               # Serveur principal
+│   ├── websocket-server.mjs    # Serveur WebSocket
 │   ├── rtmp.mjs                # Serveur RTMP
-│   ├── package.json            # Dépendances backend
-│   └── media/                  # Fichiers HLS générés
-├── supabase/                   # Migrations Supabase
+│   ├── discord-bot.mjs         # Bot Discord
+│   ├── lib/                    # Librairies
+│   │   └── database.mjs        # Gestion SQLite
+│   ├── data/                   # Base de données
+│   │   └── app.db              # SQLite (créé automatiquement)
+│   ├── media/                  # Fichiers HLS générés
+│   ├── .env                    # Configuration serveur
+│   └── package.json            # Dépendances backend
 └── package.json                # Dépendances frontend
 ```
 
@@ -146,10 +182,13 @@ streaming-platform/
 
 ### Utilisateur Standard
 
-1. **Créer un compte** - Inscription via l'interface
-2. **Regarder les streams** - Voir les streams en direct
-3. **Participer au chat** - Chat global ou par stream
-4. **Signaler du contenu** - Signaler les abus
+1. **Obtenir un compte Discord** (recommandé)
+   - Tapez `/account` sur le serveur Discord
+   - Recevez vos identifiants en DM (valables 24h)
+
+2. **Se connecter** - Utiliser les identifiants Discord ou créer un compte manuel
+3. **Regarder les streams** - Voir les streams en direct
+4. **Participer au chat** - Chat global ou par stream
 
 ### Administrateur
 
@@ -232,17 +271,43 @@ streaming-platform/
 }
 ```
 
-## 🔐 Sécurité avec Supabase
+## 🤖 Bot Discord - Comptes Temporaires
 
-### Row Level Security (RLS)
+### Fonctionnalités
 
-Toutes les tables ont RLS activé avec des policies restrictives :
+- **Génération automatique** de comptes via `/account`
+- **Comptes temporaires** valides 24h
+- **Un compte par utilisateur Discord** maximum
+- **Identifiants envoyés en DM** pour la confidentialité
+- **Expiration automatique** après 24h
+- **Logs complets** dans le panel admin
 
-- **profiles** - Users peuvent lire tous les profils, modifier le leur
-- **streams** - Lecture pour tous, écriture pour admins/mods
-- **chat_messages** - Lecture pour tous, insertion pour authenticated, suppression pour admins
-- **banned_users** - Lecture/écriture pour admins uniquement
-- **muted_users** - Lecture/écriture pour admins uniquement
+### Configuration
+
+1. Créer une application Discord sur https://discord.com/developers/applications
+2. Activer les **Privileged Gateway Intents**
+3. Copier le token dans `server/.env`
+4. Inviter le bot sur votre serveur
+5. Lancer avec `npm run bot`
+
+**Guide complet**: Voir `server/DISCORD_BOT_SETUP.md`
+
+## 🔐 Sécurité Locale
+
+### Base de Données SQLite
+
+- **Fichier local** (`server/data/app.db`) - Aucune exposition réseau
+- **Mots de passe hashés** avec bcrypt (salt rounds: 10)
+- **Validation côté serveur** de toutes les requêtes
+- **Contrôle d'accès** par rôles (viewer, moderator, admin)
+- **Fingerprinting** pour identification des utilisateurs
+
+### Protection
+
+- **Comptes temporaires** expirés automatiquement
+- **Mutes progressifs** (5min → 15min → 30min → 1h → permanent)
+- **Bans** avec durée configurable ou permanents
+- **Logs d'activité** de toutes les actions importantes
 
 ### Système de Mute Progressif
 
@@ -270,28 +335,38 @@ lsof -ti:3000 | xargs kill -9
 - **Mac** : `brew install ffmpeg`
 
 ### WebSocket déconnecté
-1. Vérifier que le serveur backend est lancé
+1. Vérifier que le serveur backend est lancé (`npm start` dans server/)
 2. Vérifier la console navigateur (F12)
-3. Vérifier les variables d'environnement Supabase
+3. Vérifier que le port 3001 est disponible
 
 ### Stream ne s'affiche pas
 1. Vérifier que le serveur RTMP est lancé
 2. Vérifier les logs FFmpeg
 3. Vérifier que les fichiers HLS sont générés dans `server/media/live/`
 
-## 📊 Migrations Supabase
+## 💾 Base de Données SQLite
 
-Les migrations sont dans `supabase/migrations/` :
+### Initialisation Automatique
 
-```sql
--- Exemple de migration
-create_streaming_platform_schema.sql
-```
+La base de données SQLite est créée automatiquement au premier lancement dans `server/data/app.db`.
 
-Pour appliquer les migrations manuellement :
+Toutes les tables sont créées automatiquement:
+- `users` - Utilisateurs et comptes Discord
+- `streams` - Streams actifs
+- `chat_messages` - Historique du chat
+- `connected_users` - Utilisateurs en ligne
+- `banned_users` - Utilisateurs bannis
+- `muted_users` - Utilisateurs mute
+- `activity_logs` - Logs de toutes les actions
+
+### Backup
+
 ```bash
-# Via Supabase Dashboard
-# SQL Editor → Coller le contenu de la migration → Run
+# Backup simple
+cp server/data/app.db server/data/app.db.backup
+
+# Backup avec date
+cp server/data/app.db server/data/app.db.$(date +%Y%m%d)
 ```
 
 ## 🔄 Workflow de Streaming
@@ -301,7 +376,7 @@ Pour appliquer les migrations manuellement :
 3. **HLS** → Serveur HTTP (port 8003)
 4. **Frontend** → Lecture HLS via HLS.js
 5. **Backend** → Notification WebSocket aux clients
-6. **Supabase** → Stockage des métadonnées du stream
+6. **SQLite** → Stockage des métadonnées du stream localement
 
 ## 📝 Scripts Disponibles
 
@@ -316,8 +391,9 @@ npm run server       # Lancer le serveur principal
 npm run rtmp         # Lancer le serveur RTMP
 
 # Serveur (dans /server)
-npm start            # Serveur WebSocket/API
-npm run rtmp         # Serveur RTMP
+npm start            # Serveur WebSocket + RTMP
+npm run bot          # Bot Discord
+npm run dev          # Serveur + Bot en même temps
 ```
 
 ## 🤝 Contribution
@@ -332,7 +408,16 @@ npm run rtmp         # Serveur RTMP
 
 Ce projet est sous licence MIT.
 
+## 🌐 Connexions Externes
+
+**IMPORTANT** : Le système fonctionne 100% en localhost, sauf:
+
+- **Bot Discord** (optionnel) - Connexion aux serveurs Discord nécessaire
+- Aucune autre connexion cloud
+- Toutes les données restent sur votre machine
+- Base de données SQLite locale
+
 ---
 
-**Version 5.0 - Ur best experience**
-*Plateforme de streaming moderne avec chat en temps réel*
+**Version 5.0 - 100% Localhost Edition**
+*Plateforme de streaming moderne avec chat en temps réel - Tout sur votre machine*
