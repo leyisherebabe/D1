@@ -132,8 +132,15 @@ function stopHLSConversion(streamKey) {
 }
 
 nms.on('prePublish', (id, StreamPath, args) => {
-  const streamKey = StreamPath.replace('/live/', '');
-  console.log(`[RTMP] 🔴 Stream démarré: ${streamKey}`);
+  // Nettoyer le StreamPath pour extraire la clé
+  let streamKey = StreamPath.replace('/live/', '').replace('//', '');
+
+  // Si le streamKey commence par /, le retirer
+  if (streamKey.startsWith('/')) {
+    streamKey = streamKey.substring(1);
+  }
+
+  console.log(`[RTMP] 🔴 Stream démarré: ${streamKey} (path: ${StreamPath})`);
 
   activeStreams.set(streamKey, {
     id: id,
@@ -146,8 +153,15 @@ nms.on('prePublish', (id, StreamPath, args) => {
 });
 
 nms.on('donePublish', (id, StreamPath, args) => {
-  const streamKey = StreamPath.replace('/live/', '');
-  console.log(`[RTMP] ⏹️ Stream arrêté: ${streamKey}`);
+  // Nettoyer le StreamPath pour extraire la clé
+  let streamKey = StreamPath.replace('/live/', '').replace('//', '');
+
+  // Si le streamKey commence par /, le retirer
+  if (streamKey.startsWith('/')) {
+    streamKey = streamKey.substring(1);
+  }
+
+  console.log(`[RTMP] ⏹️ Stream arrêté: ${streamKey} (path: ${StreamPath})`);
 
   if (streamTimeouts.has(streamKey)) {
     clearInterval(streamTimeouts.get(streamKey));
