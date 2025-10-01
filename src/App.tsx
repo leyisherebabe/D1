@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Shield, Crown, LogOut, Users, Radio, Zap, Globe, Lock, Activity, WifiOff } from 'lucide-react';
 import AuthPage from './components/AuthPage';
-import AdminPanel from './components/AdminPanel';
+import AdminPanelEnhanced from './components/AdminPanelEnhanced';
 import StreamPlayer from './components/StreamPlayer';
 import ChatBox from './components/ChatBox';
 import { WebSocketService } from './services/websocket';
@@ -417,12 +417,11 @@ function App() {
       {/* Contenu principal */}
       <main className="animate-in fade-in-0 duration-500">
         {currentPage === 'admin' && adminAccess ? (
-          <AdminPanel
+          <AdminPanelEnhanced
             currentUser={currentUser}
             connectedUsers={connectedUsers}
             chatMessages={chatMessages}
             wsService={wsServiceInstance}
-            onStreamSourceChange={handleStreamSourceChange}
           />
         ) : (
           /* Page d'accueil moderne avec lecteur de stream */
