@@ -17,7 +17,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ messages, currentUser, wsService, onD
   const chatContainerRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: 'auto' });
   };
 
   useEffect(() => {
@@ -105,8 +105,7 @@ const ChatBox: React.FC<ChatBoxProps> = ({ messages, currentUser, wsService, onD
       {/* Messages */}
       <div
         ref={chatContainerRef}
-        className="flex-1 overflow-y-auto p-6 space-y-4 scroll-smooth"
-        style={{ scrollBehavior: 'smooth' }}
+        className="flex-1 overflow-y-auto p-6 space-y-4"
       >
         {messages.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-center">

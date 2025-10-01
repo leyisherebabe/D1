@@ -61,7 +61,7 @@ const HomePage: React.FC<HomePageProps> = ({ activeUsers }) => { // Acceptez la 
             
             {/* Particules flottantes */}
             <div className="absolute inset-0">
-              {[...Array(15)].map((_, i) => (
+              {[...Array(6)].map((_, i) => (
                 <div
                   key={i}
                   className="absolute w-1 h-1 bg-white/20 rounded-full animate-float"
@@ -69,7 +69,7 @@ const HomePage: React.FC<HomePageProps> = ({ activeUsers }) => { // Acceptez la 
                     left: `${Math.random() * 100}%`,
                     top: `${Math.random() * 100}%`,
                     animationDelay: `${Math.random() * 5}s`,
-                    animationDuration: `${3 + Math.random() * 4}s`
+                    animationDuration: `${5 + Math.random() * 3}s`
                   }}
                 />
               ))}
@@ -285,7 +285,7 @@ const HomePage: React.FC<HomePageProps> = ({ activeUsers }) => { // Acceptez la 
                 Rejoindre le Chat
               </button>
               <button 
-                onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+                onClick={() => window.scrollTo({ top: 0, behavior: 'auto' })}
                 className="bg-white/5 backdrop-blur-sm border border-white/10 hover:bg-white/10 text-white px-8 py-4 rounded-2xl font-semibold text-lg transition-all hover:border-white/20"
               >
                 En Savoir Plus

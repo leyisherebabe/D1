@@ -26,24 +26,38 @@
 
 .animate-float {
   animation: float 6s ease-in-out infinite;
+  will-change: transform;
 }
 
 .animate-gradient {
   background-size: 200% 200%;
   animation: gradient 3s ease infinite;
+  will-change: background-position;
 }
 
 .animate-glow {
   animation: glow 2s ease-in-out infinite;
+  will-change: box-shadow;
 }
 
 .animate-pulse-glow {
   animation: pulse-glow 2s ease-in-out infinite;
+  will-change: box-shadow;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-gradient,
+  .animate-glow,
+  .animate-pulse-glow {
+    animation: none;
+  }
 }
 
 /* Scrollbar personnalisée pour le thème sombre */
 .scrollbar-thin {
   scrollbar-width: thin;
+  scroll-behavior: auto;
 }
 
 .scrollbar-thumb-slate-600::-webkit-scrollbar-thumb {
