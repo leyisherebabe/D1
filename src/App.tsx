@@ -3,6 +3,7 @@ import { Shield, Crown, LogOut, Users, Radio, Zap, Globe, Lock, Activity, WifiOf
 import AuthPage from './components/AuthPage';
 import AdminPanel from './components/AdminPanel';
 import StreamPlayer from './components/StreamPlayer';
+import ChatBox from './components/ChatBox';
 import { WebSocketService } from './services/websocket';
 import { User, ConnectedUser, ChatMessage, StreamSource } from './types';
 import { generateSecureId } from './utils';
@@ -98,13 +99,41 @@ function App() {
             alert('⚠️ ' + data.message);
             handleLogout();
             break;
+          case 'stream_detected':
+            if (data.stream && data.stream.hlsUrl) {
+              const newStreamSource: StreamSource = {
+                id: data.streamKey || crypto.randomUUID(),
+                name: data.stream.title || `Stream ${data.streamKey}`,
+                url: data.stream.hlsUrl,
+                type: 'm3u8',
+                isActive: true,
+                createdAt: new Date(data.stream.startTime || new Date()),
+                createdBy: 'RTMP Auto-Detect'
+              };
+              setCurrentStreamSource(newStreamSource);
+              console.log('🔴 Stream RTMP détecté:', newStreamSource);
+            }
+            break;
+          case 'stream_ended':
+            if (currentStreamSource && data.streamKey === currentStreamSource.id) {
+              setCurrentStreamSource(null);
+              console.log('⏹️ Stream RTMP terminé:', data.streamKey);
+            }
+            break;
+          case 'message_deleted':
+            setChatMessages(prev => prev.filter(msg => msg.id !== data.messageId));
+            break;
         }
       } catch (error) {
         console.error('Error processing WebSocket message:', error);
       }
     };
 
-    const wsService = new WebSocketService(handleIncomingMessage);
+    const handleConnectionStatus = (status: 'connecting' | 'connected' | 'disconnected' | 'error') => {
+      setWsConnectionStatus(status);
+    };
+
+    const wsService = new WebSocketService(handleIncomingMessage, handleConnectionStatus);
     wsService.connect();
     setWsServiceInstance(wsService);
 
@@ -112,6 +141,17 @@ function App() {
       wsService.disconnect();
     };
   }, []);
+
+  useEffect(() => {
+    if (wsServiceInstance && currentUser && isAuthenticated) {
+      wsServiceInstance.sendUserInfo(currentUser.username, 'home');
+      setTimeout(() => {
+        if (wsServiceInstance.ws && wsServiceInstance.ws.readyState === WebSocket.OPEN) {
+          wsServiceInstance.ws.send(JSON.stringify({ type: 'join_global_chat' }));
+        }
+      }, 500);
+    }
+  }, [wsServiceInstance, currentUser, isAuthenticated]);
 
   // Vérification de l'authentification au chargement
   useEffect(() => {
@@ -199,6 +239,10 @@ function App() {
 
   const handleStreamSourceChange = useCallback((source: StreamSource | null) => {
     setCurrentStreamSource(source);
+  }, []);
+
+  const handleDeleteMessage = useCallback((messageId: string) => {
+    setChatMessages(prev => prev.filter(msg => msg.id !== messageId));
   }, []);
 
   // Modal d'accès admin moderne
@@ -424,6 +468,18 @@ function App() {
                   </div>
                 )}
                 
+                {/* Chat Global quand pas de stream */}
+                {!currentStreamSource && (
+                  <div className="mb-8">
+                    <ChatBox
+                      messages={chatMessages}
+                      currentUser={currentUser}
+                      wsService={wsServiceInstance}
+                      onDeleteMessage={handleDeleteMessage}
+                    />
+                  </div>
+                )}
+
                 {/* Statistiques modernes */}
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
                   {[
