@@ -68,7 +68,7 @@ async function notifyWebSocketServer(action, streamKey, data = {}) {
       description: data.description || 'Stream RTMP',
       thumbnail: data.thumbnail || 'https://images.pexels.com/photos/1763075/pexels-photo-1763075.jpeg?auto=compress&cs=tinysrgb&w=800&h=450&dpr=1',
       rtmpUrl: `rtmp://localhost:1935/live/${streamKey}`,
-      hlsUrl: `http://localhost:8003/live/${streamKey}.m3u8`
+      hlsUrl: `http://localhost:8003/live/${streamKey}/index.m3u8`
     });
   } catch (error) {
     console.log(`⚠️ [RTMP] Notification WS échouée: ${error.message}`);
