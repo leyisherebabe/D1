@@ -743,6 +743,52 @@ server.on('request', (req, res) => {
         res.end(JSON.stringify({ success: false, error: error.message }));
       }
     });
+  } else if (req.url === '/api/admin/banned' && req.method === 'GET') {
+    try {
+      const banned = await db.getBannedUsers();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, banned }));
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: error.message }));
+    }
+  } else if (req.url === '/api/admin/muted' && req.method === 'GET') {
+    try {
+      const muted = await db.getMutedUsers();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, muted }));
+    } catch (error) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: error.message }));
+    }
+  } else if (req.url === '/api/admin/unban' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body);
+        await db.unbanUser(data.fingerprint, data.ip);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      }
+    });
+  } else if (req.url === '/api/admin/unmute' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body);
+        await db.unmuteUser(data.fingerprint);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      }
+    });
   } else {
     res.writeHead(404);
     res.end();
