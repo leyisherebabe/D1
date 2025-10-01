@@ -1,7 +1,19 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Users, Activity, Settings, Ban, VolumeX, Trash2, Eye, Crown, Search, Clock, TriangleAlert as AlertTriangle, UserX, MessageSquare, Download, Filter, RefreshCw, TrendingUp, ChartBar as BarChart3, Zap, Globe, Terminal, Lock, Clock as Unlock, CircleAlert as AlertCircle, CircleCheck as CheckCircle, Circle as XCircle, Play, Pause, Radio, Video, UserCheck, UserPlus, Calendar, Server, Database, Wifi, WifiOff, Info, FileText, Mail, Key, CreditCard as Edit, Save, X as CloseIcon } from 'lucide-react';
+import {
+  Shield, Users, Activity, Settings, Ban, VolumeX, Trash2, Eye, Crown, Search,
+  Clock, AlertTriangle, UserX, MessageSquare, Download, Filter, RefreshCw,
+  TrendingUp, BarChart3, Zap, Globe, Terminal, Lock, Unlock, AlertCircle,
+  CheckCircle, XCircle, Play, Pause, Radio, Video, UserCheck, UserPlus,
+  Calendar, Server, Database, Wifi, WifiOff, Info, FileText, Mail, Key,
+  Edit, Save, X as CloseIcon, Bell, Send, Megaphone, Target, List
+} from 'lucide-react';
 import { ConnectedUser, ChatMessage, StreamSource } from '../types';
 import { formatTime } from '../utils';
+import UserProfileModal from './admin/UserProfileModal';
+import BroadcastModal from './admin/BroadcastModal';
+import AutoModRulesModal from './admin/AutoModRulesModal';
+import IPBlacklistModal from './admin/IPBlacklistModal';
+import AnalyticsChart from './admin/AnalyticsChart';
 
 interface AdminPanelProps {
   currentUser: any;
@@ -74,7 +86,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   wsService,
   onStreamSourceChange
 }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'moderation' | 'chat' | 'logs' | 'streams' | 'discord' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'analytics' | 'users' | 'moderation' | 'chat' | 'logs' | 'streams' | 'discord' | 'automod' | 'blacklist' | 'settings'>('dashboard');
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [bannedUsers, setBannedUsers] = useState<BannedUser[]>([]);
   const [mutedUsers, setMutedUsers] = useState<MutedUser[]>([]);
@@ -112,6 +124,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     discordRoleId: ''
   });
   const [editingSettings, setEditingSettings] = useState(false);
+  const [showUserProfile, setShowUserProfile] = useState(false);
+  const [showBroadcast, setShowBroadcast] = useState(false);
+  const [showAutoMod, setShowAutoMod] = useState(false);
+  const [showBlacklist, setShowBlacklist] = useState(false);
+  const [profileUser, setProfileUser] = useState<any>(null);
+  const [notifications, setNotifications] = useState<any[]>([]);
+  const [analyticsRange, setAnalyticsRange] = useState<'24h' | '7d' | '30d'>('24h');
 
   useEffect(() => {
     fetchAllData();
@@ -479,6 +498,13 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
           <div className="flex items-center gap-3">
             <button
+              onClick={() => setShowBroadcast(true)}
+              className="px-6 py-3 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-xl transition-all flex items-center gap-2"
+            >
+              <Megaphone className="h-5 w-5" />
+              Diffuser
+            </button>
+            <button
               onClick={() => setAutoRefresh(!autoRefresh)}
               className={`p-3 rounded-xl transition-all ${
                 autoRefresh
@@ -501,11 +527,14 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           {[
             { id: 'dashboard', icon: BarChart3, label: 'Tableau de bord' },
+            { id: 'analytics', icon: TrendingUp, label: 'Analytics' },
             { id: 'users', icon: Users, label: 'Utilisateurs' },
             { id: 'moderation', icon: Shield, label: 'Modération' },
             { id: 'chat', icon: MessageSquare, label: 'Messages' },
             { id: 'logs', icon: Activity, label: 'Logs' },
             { id: 'streams', icon: Video, label: 'Streams' },
+            { id: 'automod', icon: Target, label: 'Auto-Mod' },
+            { id: 'blacklist', icon: Ban, label: 'Blacklist' },
             { id: 'discord', icon: Globe, label: 'Discord' },
             { id: 'settings', icon: Settings, label: 'Paramètres' }
           ].map(tab => (
@@ -720,6 +749,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => {
+                                setProfileUser(user);
+                                setShowUserProfile(true);
+                              }}
+                              className="p-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-lg transition-all"
+                              title="Voir profil"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </button>
                             <button
                               onClick={() => {
                                 setSelectedUser(user);
@@ -960,6 +999,132 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                 <div className="p-4 bg-slate-900/50 rounded-xl">
                   <div className="text-slate-400 text-sm mb-2">Durée Moyenne</div>
                   <div className="text-3xl font-bold text-green-400">{streamStats.avgDuration}m</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'analytics' && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between mb-6">
+              <h3 className="text-2xl font-bold">Analytics Avancés</h3>
+              <div className="flex gap-2">
+                {['24h', '7d', '30d'].map((range) => (
+                  <button
+                    key={range}
+                    onClick={() => setAnalyticsRange(range as any)}
+                    className={`px-4 py-2 rounded-lg transition-all ${
+                      analyticsRange === range
+                        ? 'bg-cyan-500 text-white'
+                        : 'bg-slate-800 text-slate-400 hover:bg-slate-700'
+                    }`}
+                  >
+                    {range}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              <AnalyticsChart type="users" timeRange={analyticsRange} />
+              <AnalyticsChart type="messages" timeRange={analyticsRange} />
+              <AnalyticsChart type="streams" timeRange={analyticsRange} />
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'automod' && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <Target className="h-6 w-6 text-cyan-400" />
+                  Modération Automatique
+                </h3>
+                <button
+                  onClick={() => setShowAutoMod(true)}
+                  className="px-6 py-3 bg-gradient-to-r from-cyan-500 to-purple-500 hover:from-cyan-600 hover:to-purple-600 text-white rounded-xl transition-all flex items-center gap-2"
+                >
+                  <Settings className="h-5 w-5" />
+                  Configurer les règles
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="bg-slate-900/50 rounded-xl p-4 border border-green-500/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-bold">Anti-Spam</h4>
+                    <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs">Actif</span>
+                  </div>
+                  <p className="text-sm text-slate-400">Détecte les messages répétés</p>
+                  <div className="mt-3 text-xs text-slate-500">Action: Mute 5min</div>
+                </div>
+
+                <div className="bg-slate-900/50 rounded-xl p-4 border border-green-500/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-bold">Anti-CAPS</h4>
+                    <span className="px-3 py-1 bg-green-500/20 text-green-400 rounded-full text-xs">Actif</span>
+                  </div>
+                  <p className="text-sm text-slate-400">Messages en majuscules</p>
+                  <div className="mt-3 text-xs text-slate-500">Action: Avertissement</div>
+                </div>
+
+                <div className="bg-slate-900/50 rounded-xl p-4 border border-slate-500/20">
+                  <div className="flex items-center justify-between mb-3">
+                    <h4 className="font-bold">Anti-Liens</h4>
+                    <span className="px-3 py-1 bg-slate-500/20 text-slate-400 rounded-full text-xs">Inactif</span>
+                  </div>
+                  <p className="text-sm text-slate-400">Bloque les URLs</p>
+                  <div className="mt-3 text-xs text-slate-500">Action: Mute 10min</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'blacklist' && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <Ban className="h-6 w-6 text-red-400" />
+                  Liste Noire
+                </h3>
+                <button
+                  onClick={() => setShowBlacklist(true)}
+                  className="px-6 py-3 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white rounded-xl transition-all flex items-center gap-2"
+                >
+                  <Shield className="h-5 w-5" />
+                  Gérer la blacklist
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="bg-slate-900/50 rounded-xl p-6 border border-cyan-500/20">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-3 bg-cyan-500/20 rounded-xl">
+                      <Server className="h-6 w-6 text-cyan-400" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold">IPs Bloquées</h4>
+                      <p className="text-sm text-slate-400">Adresses IP interdites</p>
+                    </div>
+                  </div>
+                  <div className="text-4xl font-bold text-cyan-400">0</div>
+                </div>
+
+                <div className="bg-slate-900/50 rounded-xl p-6 border border-purple-500/20">
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="p-3 bg-purple-500/20 rounded-xl">
+                      <Key className="h-6 w-6 text-purple-400" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold">Fingerprints Bloqués</h4>
+                      <p className="text-sm text-slate-400">Signatures uniques</p>
+                    </div>
+                  </div>
+                  <div className="text-4xl font-bold text-purple-400">0</div>
                 </div>
               </div>
             </div>
@@ -1361,6 +1526,39 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
             </div>
           </div>
         </div>
+      )}
+
+      {showUserProfile && profileUser && (
+        <UserProfileModal user={profileUser} onClose={() => setShowUserProfile(false)} />
+      )}
+
+      {showBroadcast && (
+        <BroadcastModal
+          onClose={() => setShowBroadcast(false)}
+          onSend={(message, type) => {
+            if (wsService) {
+              wsService.send({
+                type: 'admin_broadcast',
+                message,
+                broadcastType: type,
+                adminUsername: currentUser.username
+              });
+            }
+          }}
+        />
+      )}
+
+      {showAutoMod && (
+        <AutoModRulesModal
+          onClose={() => setShowAutoMod(false)}
+          onSave={(rules) => {
+            console.log('Saving auto-mod rules:', rules);
+          }}
+        />
+      )}
+
+      {showBlacklist && (
+        <IPBlacklistModal onClose={() => setShowBlacklist(false)} />
       )}
     </div>
   );
