@@ -1,10 +1,11 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Shield, Users, Activity, Settings, Ban, VolumeX, Trash2, Eye, Crown, Search,
   Clock, AlertTriangle, UserX, MessageSquare, Download, Filter, RefreshCw,
   TrendingUp, BarChart3, Zap, Globe, Terminal, Lock, Unlock, AlertCircle,
   CheckCircle, XCircle, Play, Pause, Radio, Video, UserCheck, UserPlus,
-  Calendar, Server, Database, Wifi, WifiOff, Info, FileText, Mail
+  Calendar, Server, Database, Wifi, WifiOff, Info, FileText, Mail, Key,
+  Edit, Save, X as CloseIcon
 } from 'lucide-react';
 import { ConnectedUser, ChatMessage, StreamSource } from '../types';
 import { formatTime } from '../utils';
@@ -38,6 +39,7 @@ interface BannedUser {
   banned_at: string;
   banned_by: string;
   is_permanent: boolean;
+  ban_end_time?: string;
 }
 
 interface MutedUser {
@@ -57,6 +59,19 @@ interface StreamStats {
   peakViewers: number;
   avgDuration: number;
   totalStreams: number;
+  isLive: boolean;
+  currentViewers: number;
+}
+
+interface SystemSettings {
+  maxViewers: number;
+  chatEnabled: boolean;
+  registrationEnabled: boolean;
+  maintenanceMode: boolean;
+  streamQuality: string;
+  discordIntegration: boolean;
+  discordServerId: string;
+  discordRoleId: string;
 }
 
 const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -66,7 +81,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   wsService,
   onStreamSourceChange
 }) => {
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'moderation' | 'logs' | 'streams' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'moderation' | 'chat' | 'logs' | 'streams' | 'discord' | 'settings'>('dashboard');
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [bannedUsers, setBannedUsers] = useState<BannedUser[]>([]);
   const [mutedUsers, setMutedUsers] = useState<MutedUser[]>([]);
@@ -79,1094 +94,1281 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     totalViews: 0,
     peakViewers: 0,
     avgDuration: 0,
-    totalStreams: 0
+    totalStreams: 0,
+    isLive: false,
+    currentViewers: 0
   });
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
-
-  // Synchronisation en temps réel
-  useEffect(() => {
-    if (!wsService?.ws) return;
-
-    const handleWSMessage = (data: any) => {
-      switch (data.type) {
-        case 'user_list':
-        case 'user_connected':
-        case 'user_disconnected':
-          fetchAllData();
-          break;
-        case 'chat_message':
-          fetchActivityLogs();
-          break;
-      }
-    };
-
-    if (wsService.ws) {
-      const originalOnMessage = wsService.ws.onmessage;
-      wsService.ws.onmessage = (event: MessageEvent) => {
-        const data = JSON.parse(event.data);
-        handleWSMessage(data);
-        if (originalOnMessage) {
-          originalOnMessage.call(wsService.ws, event);
-        }
-      };
-    }
-  }, [wsService]);
-
-  // Auto-refresh des données
-  useEffect(() => {
-    if (!autoRefresh) return;
-
-    const interval = setInterval(() => {
-      fetchAllData();
-    }, 5000); // Refresh toutes les 5 secondes
-
-    return () => clearInterval(interval);
-  }, [autoRefresh]);
-
-  const fetchAllData = useCallback(async () => {
-    await Promise.all([
-      fetchActivityLogs(),
-      fetchBannedUsers(),
-      fetchMutedUsers()
-    ]);
-  }, []);
-
-  const fetchActivityLogs = useCallback(async () => {
-    try {
-      const response = await fetch('http://localhost:3001/api/logs');
-      const data = await response.json();
-      if (data.success && data.logs) {
-        setActivityLogs(data.logs);
-      }
-    } catch (err) {
-      console.error('Error fetching logs:', err);
-    }
-  }, []);
-
-  const fetchBannedUsers = useCallback(async () => {
-    try {
-      const response = await fetch('http://localhost:3001/api/admin/banned');
-      const data = await response.json();
-      if (data.success && data.banned) {
-        setBannedUsers(data.banned);
-      }
-    } catch (err) {
-      console.error('Error fetching banned users:', err);
-    }
-  }, []);
-
-  const fetchMutedUsers = useCallback(async () => {
-    try {
-      const response = await fetch('http://localhost:3001/api/admin/muted');
-      const data = await response.json();
-      if (data.success && data.muted) {
-        setMutedUsers(data.muted);
-      }
-    } catch (err) {
-      console.error('Error fetching muted users:', err);
-    }
-  }, []);
+  const [showBanModal, setShowBanModal] = useState(false);
+  const [showMuteModal, setShowMuteModal] = useState(false);
+  const [showPromoteModal, setShowPromoteModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState<any>(null);
+  const [banReason, setBanReason] = useState('');
+  const [banDuration, setBanDuration] = useState('permanent');
+  const [muteReason, setMuteReason] = useState('');
+  const [muteDuration, setMuteDuration] = useState('60');
+  const [promoteRole, setPromoteRole] = useState('moderator');
+  const [systemSettings, setSystemSettings] = useState<SystemSettings>({
+    maxViewers: 1000,
+    chatEnabled: true,
+    registrationEnabled: true,
+    maintenanceMode: false,
+    streamQuality: '1080p',
+    discordIntegration: false,
+    discordServerId: '',
+    discordRoleId: ''
+  });
+  const [editingSettings, setEditingSettings] = useState(false);
 
   useEffect(() => {
     fetchAllData();
-  }, [fetchAllData]);
 
-  const logAction = useCallback(async (
-    actionType: string,
-    username: string,
-    details: any,
-    severity: 'low' | 'medium' | 'high' | 'critical' = 'medium'
-  ) => {
-    try {
-      await fetch('http://localhost:3001/api/logs', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          action_type: actionType,
-          username,
-          ip_address: details.ip || '',
-          fingerprint: details.fingerprint || '',
-          details,
-          severity,
-          admin_username: currentUser?.username || 'admin'
-        })
-      });
-      await fetchActivityLogs();
-    } catch (err) {
-      console.error('Error logging action:', err);
+    if (autoRefresh) {
+      const interval = setInterval(() => {
+        fetchAllData();
+      }, 5000);
+      return () => clearInterval(interval);
     }
-  }, [currentUser, fetchActivityLogs]);
+  }, [autoRefresh]);
 
-  const handleBanUser = async (user: ConnectedUser) => {
-    const reason = prompt('Raison du ban:');
-    if (!reason) return;
+  useEffect(() => {
+    setStreamStats(prev => ({
+      ...prev,
+      isLive: connectedUsers.length > 0,
+      currentViewers: connectedUsers.length
+    }));
+  }, [connectedUsers]);
+
+  const fetchAllData = async () => {
+    try {
+      await Promise.all([
+        fetchActivityLogs(),
+        fetchBannedUsers(),
+        fetchMutedUsers(),
+        fetchStreamStats()
+      ]);
+    } catch (error) {
+      console.error('Error fetching data:', error);
+    }
+  };
+
+  const fetchActivityLogs = async () => {
+    try {
+      const response = await fetch('http://localhost:3001/api/admin/activity-logs', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setActivityLogs(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching activity logs:', error);
+    }
+  };
+
+  const fetchBannedUsers = async () => {
+    try {
+      const response = await fetch('http://localhost:3001/api/admin/banned-users', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setBannedUsers(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching banned users:', error);
+    }
+  };
+
+  const fetchMutedUsers = async () => {
+    try {
+      const response = await fetch('http://localhost:3001/api/admin/muted-users', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setMutedUsers(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching muted users:', error);
+    }
+  };
+
+  const fetchStreamStats = async () => {
+    try {
+      const response = await fetch('http://localhost:3001/api/admin/stream-stats', {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        }
+      });
+      const data = await response.json();
+      if (data.success) {
+        setStreamStats(prev => ({ ...prev, ...data.data }));
+      }
+    } catch (error) {
+      console.error('Error fetching stream stats:', error);
+    }
+  };
+
+  const handleBanUser = async () => {
+    if (!selectedUser) return;
 
     setIsLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/admin/ban', {
+      const response = await fetch('http://localhost:3001/api/admin/ban-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
         body: JSON.stringify({
-          fingerprint: user.fingerprint,
-          ip: user.ip,
-          username: user.username,
-          reason,
-          bannedBy: currentUser?.username || 'admin',
-          isPermanent: true
+          fingerprint: selectedUser.fingerprint,
+          ip: selectedUser.ip,
+          username: selectedUser.username,
+          reason: banReason,
+          duration: banDuration,
+          adminUsername: currentUser.username
         })
       });
 
       const data = await response.json();
       if (data.success) {
-        wsService?.send({ type: 'ban_user', fingerprint: user.fingerprint });
-        await fetchAllData();
-        alert('✅ Utilisateur banni avec succès');
-      } else {
-        alert('❌ Erreur lors du ban');
+        setShowBanModal(false);
+        setBanReason('');
+        setSelectedUser(null);
+        fetchAllData();
+
+        if (wsService) {
+          wsService.send({
+            type: 'force_disconnect',
+            fingerprint: selectedUser.fingerprint
+          });
+        }
       }
-    } catch (err) {
-      console.error('Error banning user:', err);
-      alert('❌ Erreur lors du ban');
+    } catch (error) {
+      console.error('Error banning user:', error);
     }
     setIsLoading(false);
   };
 
-  const handleMuteUser = async (user: ConnectedUser) => {
-    const durationMin = prompt('Durée du mute (en minutes):');
-    if (!durationMin) return;
-
-    const duration = parseInt(durationMin);
-    if (isNaN(duration) || duration <= 0) {
-      alert('Durée invalide');
-      return;
-    }
-
-    const reason = prompt('Raison du mute:') || 'Aucune raison';
+  const handleMuteUser = async () => {
+    if (!selectedUser) return;
 
     setIsLoading(true);
     try {
-      const muteEndTime = new Date(Date.now() + duration * 60000);
-
-      const response = await fetch('http://localhost:3001/api/admin/mute', {
+      const response = await fetch('http://localhost:3001/api/admin/mute-user', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
         body: JSON.stringify({
-          fingerprint: user.fingerprint,
-          username: user.username,
-          ip: user.ip,
-          muteEndTime: muteEndTime.toISOString(),
-          reason,
-          mutedBy: currentUser?.username || 'admin',
-          duration: `${duration}min`
+          fingerprint: selectedUser.fingerprint,
+          username: selectedUser.username,
+          ip: selectedUser.ip,
+          reason: muteReason,
+          duration: parseInt(muteDuration),
+          adminUsername: currentUser.username
         })
       });
 
       const data = await response.json();
       if (data.success) {
-        wsService?.send({
-          type: 'mute_user',
-          fingerprint: user.fingerprint,
-          duration: duration * 60000
+        setShowMuteModal(false);
+        setMuteReason('');
+        setSelectedUser(null);
+        fetchAllData();
+      }
+    } catch (error) {
+      console.error('Error muting user:', error);
+    }
+    setIsLoading(false);
+  };
+
+  const handleUnbanUser = async (bannedUser: BannedUser) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('http://localhost:3001/api/admin/unban-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify({
+          id: bannedUser.id
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        fetchAllData();
+      }
+    } catch (error) {
+      console.error('Error unbanning user:', error);
+    }
+    setIsLoading(false);
+  };
+
+  const handleUnmuteUser = async (mutedUser: MutedUser) => {
+    setIsLoading(true);
+    try {
+      const response = await fetch('http://localhost:3001/api/admin/unmute-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify({
+          id: mutedUser.id
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        fetchAllData();
+      }
+    } catch (error) {
+      console.error('Error unmuting user:', error);
+    }
+    setIsLoading(false);
+  };
+
+  const handlePromoteUser = async () => {
+    if (!selectedUser) return;
+
+    setIsLoading(true);
+    try {
+      const response = await fetch('http://localhost:3001/api/admin/promote-user', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify({
+          username: selectedUser.username,
+          role: promoteRole,
+          adminUsername: currentUser.username
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setShowPromoteModal(false);
+        setSelectedUser(null);
+        fetchAllData();
+      }
+    } catch (error) {
+      console.error('Error promoting user:', error);
+    }
+    setIsLoading(false);
+  };
+
+  const handleDeleteMessage = async (messageId: string) => {
+    try {
+      const response = await fetch('http://localhost:3001/api/admin/delete-message', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
+        body: JSON.stringify({
+          messageId,
+          adminUsername: currentUser.username
+        })
+      });
+
+      const data = await response.json();
+      if (data.success && wsService) {
+        wsService.send({
+          type: 'message_deleted',
+          messageId
         });
-        await fetchAllData();
-        alert('✅ Utilisateur mute avec succès');
-      } else {
-        alert('❌ Erreur lors du mute');
       }
-    } catch (err) {
-      console.error('Error muting user:', err);
-      alert('❌ Erreur lors du mute');
+    } catch (error) {
+      console.error('Error deleting message:', error);
     }
-    setIsLoading(false);
   };
 
-  const handleKickUser = async (user: ConnectedUser) => {
-    if (!confirm(`Expulser ${user.username} ?`)) return;
-
+  const handleSaveSettings = async () => {
     setIsLoading(true);
     try {
-      wsService?.send({ type: 'kick_user', fingerprint: user.fingerprint });
-      await logAction('USER_KICKED', user.username, {
-        ip: user.ip,
-        fingerprint: user.fingerprint
-      }, 'medium');
-      alert('✅ Utilisateur expulsé');
-    } catch (err) {
-      console.error('Error kicking user:', err);
-      alert('❌ Erreur lors de l\'expulsion');
-    }
-    setIsLoading(false);
-  };
-
-  const handleUnbanUser = async (ban: BannedUser) => {
-    if (!confirm(`Débannir ${ban.username} ?`)) return;
-
-    setIsLoading(true);
-    try {
-      const response = await fetch('http://localhost:3001/api/admin/unban', {
+      const response = await fetch('http://localhost:3001/api/admin/update-settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${localStorage.getItem('auth_token')}`
+        },
         body: JSON.stringify({
-          fingerprint: ban.fingerprint,
-          ip: ban.ip
+          settings: systemSettings,
+          adminUsername: currentUser.username
         })
       });
 
       const data = await response.json();
       if (data.success) {
-        await fetchAllData();
-        alert('✅ Utilisateur débanni');
+        setEditingSettings(false);
       }
-    } catch (err) {
-      console.error('Error unbanning user:', err);
-      alert('❌ Erreur');
+    } catch (error) {
+      console.error('Error saving settings:', error);
     }
     setIsLoading(false);
   };
 
-  const handleUnmuteUser = async (mute: MutedUser) => {
-    if (!confirm(`Démute ${mute.username} ?`)) return;
-
-    setIsLoading(true);
-    try {
-      const response = await fetch('http://localhost:3001/api/admin/unmute', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          fingerprint: mute.fingerprint
-        })
-      });
-
-      const data = await response.json();
-      if (data.success) {
-        await fetchAllData();
-        alert('✅ Utilisateur démute');
-      }
-    } catch (err) {
-      console.error('Error unmuting user:', err);
-      alert('❌ Erreur');
-    }
-    setIsLoading(false);
+  const handleExportLogs = () => {
+    const dataStr = JSON.stringify(activityLogs, null, 2);
+    const dataBlob = new Blob([dataStr], { type: 'application/json' });
+    const url = URL.createObjectURL(dataBlob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `activity-logs-${new Date().toISOString()}.json`;
+    link.click();
   };
 
-  const handleDeleteMessage = async (messageId: string, username: string) => {
-    if (!confirm('Supprimer ce message ?')) return;
+  const filteredLogs = activityLogs.filter(log => {
+    const matchesSearch = log.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         log.details?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesSeverity = filterSeverity === 'all' || log.severity === filterSeverity;
+    return matchesSearch && matchesSeverity;
+  });
 
-    try {
-      wsService?.send({ type: 'delete_message', messageId });
-      await logAction('MESSAGE_DELETED', username, { messageId }, 'low');
-    } catch (err) {
-      console.error('Error deleting message:', err);
-    }
+  const filteredUsers = connectedUsers.filter(user => {
+    const matchesSearch = user.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         user.ip?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesRole = filterRole === 'all' || user.role === filterRole;
+    return matchesSearch && matchesRole;
+  });
+
+  const filteredMessages = chatMessages.filter(msg =>
+    msg.username?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    msg.message?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  const stats = {
+    totalUsers: connectedUsers.length,
+    totalMessages: chatMessages.length,
+    totalBanned: bannedUsers.length,
+    totalMuted: mutedUsers.length,
+    adminCount: connectedUsers.filter(u => u.role === 'admin').length,
+    moderatorCount: connectedUsers.filter(u => u.role === 'moderator').length,
+    viewerCount: connectedUsers.filter(u => u.role === 'viewer').length
   };
 
-  const handleBulkAction = async (action: 'kick' | 'mute' | 'ban') => {
-    if (selectedUsers.size === 0) {
-      alert('Sélectionnez des utilisateurs');
-      return;
-    }
-
-    if (!confirm(`${action.toUpperCase()} ${selectedUsers.size} utilisateurs ?`)) return;
-
-    setIsLoading(true);
-    for (const userId of selectedUsers) {
-      const user = connectedUsers.find(u => u.id === userId);
-      if (user) {
-        if (action === 'kick') await handleKickUser(user);
-        else if (action === 'mute') await handleMuteUser(user);
-        else if (action === 'ban') await handleBanUser(user);
-      }
-    }
-    setSelectedUsers(new Set());
-    setIsLoading(false);
+  const severityColors = {
+    low: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
+    medium: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+    high: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+    critical: 'bg-red-500/20 text-red-400 border-red-500/30'
   };
 
-  const filteredUsers = useMemo(() => {
-    return connectedUsers.filter(user => {
-      const matchesSearch = user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           user.ip.includes(searchTerm);
-      const matchesRole = filterRole === 'all' || user.role === filterRole;
-      return matchesSearch && matchesRole;
-    });
-  }, [connectedUsers, searchTerm, filterRole]);
-
-  const filteredLogs = useMemo(() => {
-    return activityLogs.filter(log => {
-      const matchesSearch = log.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           log.action_type.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                           log.ip_address.includes(searchTerm);
-      const matchesSeverity = filterSeverity === 'all' || log.severity === filterSeverity;
-      return matchesSearch && matchesSeverity;
-    });
-  }, [activityLogs, searchTerm, filterSeverity]);
-
-  const stats = useMemo(() => {
-    const now = Date.now();
-    const recentUsers = connectedUsers.filter(u =>
-      now - new Date(u.connectTime).getTime() < 300000 // 5 min
-    );
-    const highSeverityLogs = activityLogs.filter(l =>
-      l.severity === 'high' || l.severity === 'critical'
-    );
-
-    return {
-      totalUsers: connectedUsers.length,
-      recentUsers: recentUsers.length,
-      totalMessages: chatMessages.length,
-      recentMessages: chatMessages.filter(m =>
-        now - new Date(m.timestamp).getTime() < 300000
-      ).length,
-      totalLogs: activityLogs.length,
-      highSeverityAlerts: highSeverityLogs.length,
-      bannedCount: bannedUsers.length,
-      mutedCount: mutedUsers.length
-    };
-  }, [connectedUsers, chatMessages, activityLogs, bannedUsers, mutedUsers]);
-
-  const exportLogs = () => {
-    const csvContent = [
-      ['Date', 'Action', 'Utilisateur', 'IP', 'Sévérité', 'Admin'].join(','),
-      ...filteredLogs.map(log => [
-        new Date(log.created_at).toLocaleString(),
-        log.action_type,
-        log.username,
-        log.ip_address,
-        log.severity,
-        log.admin_username
-      ].join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `logs-${Date.now()}.csv`;
-    a.click();
+  const roleColors = {
+    admin: 'bg-red-500/20 text-red-400 border-red-500/30',
+    moderator: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+    viewer: 'bg-slate-500/20 text-slate-400 border-slate-500/30'
   };
 
-  const exportUsers = () => {
-    const csvContent = [
-      ['Username', 'IP', 'Connection Time', 'Role', 'Status'].join(','),
-      ...filteredUsers.map(user => [
-        user.username,
-        user.ip,
-        new Date(user.connectTime).toLocaleString(),
-        user.role || 'viewer',
-        'online'
-      ].join(','))
-    ].join('\n');
-
-    const blob = new Blob([csvContent], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `users-${Date.now()}.csv`;
-    a.click();
-  };
-
-  const renderDashboard = () => (
-    <div className="space-y-6">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {[
-          {
-            label: 'Utilisateurs en ligne',
-            value: stats.totalUsers,
-            change: `+${stats.recentUsers} récents`,
-            icon: Users,
-            color: 'from-blue-500 to-cyan-500',
-            bg: 'bg-blue-500/10',
-            border: 'border-blue-500/20'
-          },
-          {
-            label: 'Messages totaux',
-            value: stats.totalMessages,
-            change: `+${stats.recentMessages} récents`,
-            icon: MessageSquare,
-            color: 'from-green-500 to-emerald-500',
-            bg: 'bg-green-500/10',
-            border: 'border-green-500/20'
-          },
-          {
-            label: 'Logs d\'activité',
-            value: stats.totalLogs,
-            change: `${stats.highSeverityAlerts} alertes`,
-            icon: Activity,
-            color: 'from-orange-500 to-amber-500',
-            bg: 'bg-orange-500/10',
-            border: 'border-orange-500/20'
-          },
-          {
-            label: 'Modération',
-            value: stats.bannedCount + stats.mutedCount,
-            change: `${stats.bannedCount}B / ${stats.mutedCount}M`,
-            icon: Shield,
-            color: 'from-red-500 to-rose-500',
-            bg: 'bg-red-500/10',
-            border: 'border-red-500/20'
-          }
-        ].map((stat, index) => (
-          <div key={index} className={`${stat.bg} backdrop-blur-sm border ${stat.border} rounded-xl p-5 hover:scale-105 transition-all`}>
-            <div className="flex items-center justify-between mb-3">
-              <div className={`w-12 h-12 bg-gradient-to-r ${stat.color} rounded-lg flex items-center justify-center`}>
-                <stat.icon className="h-6 w-6 text-white" />
-              </div>
-              <TrendingUp className="h-5 w-5 text-green-400" />
-            </div>
-            <div className="text-3xl font-bold text-white mb-1">{stat.value}</div>
-            <div className="text-slate-400 text-sm mb-1">{stat.label}</div>
-            <div className="text-slate-500 text-xs">{stat.change}</div>
+  return (
+    <div className="min-h-screen bg-slate-950 text-white">
+      <div className="max-w-[1800px] mx-auto p-6">
+        <div className="mb-8 flex items-center justify-between">
+          <div>
+            <h1 className="text-4xl font-bold mb-2 flex items-center gap-3">
+              <Shield className="h-10 w-10 text-red-500" />
+              Panel Administrateur
+            </h1>
+            <p className="text-slate-400">Gestion complète de la plateforme</p>
           </div>
-        ))}
-      </div>
 
-      {/* Activity Overview */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Recent Activity */}
-        <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-white flex items-center">
-              <Activity className="h-5 w-5 mr-2 text-orange-400" />
-              Activité Récente
-            </h3>
+          <div className="flex items-center gap-3">
             <button
-              onClick={() => setActiveTab('logs')}
-              className="text-blue-400 hover:text-blue-300 text-sm font-semibold"
+              onClick={() => setAutoRefresh(!autoRefresh)}
+              className={`p-3 rounded-xl transition-all ${
+                autoRefresh
+                  ? 'bg-green-500/20 text-green-400 border border-green-500/30'
+                  : 'bg-slate-800 text-slate-400 border border-slate-700'
+              }`}
             >
-              Voir tout →
+              <RefreshCw className={`h-5 w-5 ${autoRefresh ? 'animate-spin' : ''}`} />
             </button>
-          </div>
-          <div className="space-y-2 max-h-80 overflow-y-auto">
-            {activityLogs.slice(0, 8).map(log => (
-              <div key={log.id} className="bg-slate-800/50 rounded-lg p-3 hover:bg-slate-800/70 transition-colors">
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-white text-sm font-semibold">{log.action_type}</span>
-                  <span className={`px-2 py-1 rounded text-xs font-bold ${
-                    log.severity === 'critical' ? 'bg-red-500/20 text-red-400' :
-                    log.severity === 'high' ? 'bg-orange-500/20 text-orange-400' :
-                    log.severity === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                    'bg-slate-500/20 text-slate-400'
-                  }`}>
-                    {log.severity}
-                  </span>
-                </div>
-                <div className="text-slate-400 text-xs">
-                  {log.username} • {formatTime(new Date(log.created_at))}
-                </div>
-              </div>
-            ))}
+            <button
+              onClick={fetchAllData}
+              disabled={isLoading}
+              className="px-6 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl border border-slate-700 transition-all disabled:opacity-50"
+            >
+              Rafraîchir
+            </button>
           </div>
         </div>
 
-        {/* Online Users */}
-        <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-bold text-white flex items-center">
-              <Users className="h-5 w-5 mr-2 text-blue-400" />
-              Utilisateurs en ligne
-            </h3>
-            <button
-              onClick={() => setActiveTab('users')}
-              className="text-blue-400 hover:text-blue-300 text-sm font-semibold"
-            >
-              Gérer →
-            </button>
-          </div>
-          <div className="space-y-2 max-h-80 overflow-y-auto">
-            {connectedUsers.slice(0, 8).map(user => (
-              <div key={user.id} className="bg-slate-800/50 rounded-lg p-3 flex items-center justify-between hover:bg-slate-800/70 transition-colors">
-                <div className="flex items-center space-x-3">
-                  <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center">
-                    <span className="text-white font-bold text-sm">{user.username[0].toUpperCase()}</span>
-                  </div>
-                  <div>
-                    <div className="text-white font-semibold text-sm">{user.username}</div>
-                    <div className="text-slate-400 text-xs">{user.ip}</div>
-                  </div>
-                </div>
-                <span className="flex items-center text-green-400 text-xs font-semibold">
-                  <span className="w-2 h-2 bg-green-400 rounded-full mr-2 animate-pulse"></span>
-                  En ligne
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      {/* System Status */}
-      <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">
-        <h3 className="text-xl font-bold text-white mb-4 flex items-center">
-          <Server className="h-5 w-5 mr-2 text-emerald-400" />
-          État du Système
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
           {[
-            { label: 'WebSocket', status: 'online', icon: Wifi, color: 'text-green-400' },
-            { label: 'Base de données', status: 'online', icon: Database, color: 'text-green-400' },
-            { label: 'RTMP Server', status: 'online', icon: Radio, color: 'text-green-400' },
-            { label: 'Auto-Sync', status: autoRefresh ? 'active' : 'paused', icon: RefreshCw, color: autoRefresh ? 'text-green-400' : 'text-gray-400' }
-          ].map((item, index) => (
-            <div key={index} className="bg-slate-800/50 rounded-lg p-4 text-center">
-              <item.icon className={`h-8 w-8 mx-auto mb-2 ${item.color}`} />
-              <div className="text-white font-semibold text-sm">{item.label}</div>
-              <div className={`text-xs font-semibold mt-1 ${item.color}`}>{item.status}</div>
-            </div>
+            { id: 'dashboard', icon: BarChart3, label: 'Tableau de bord' },
+            { id: 'users', icon: Users, label: 'Utilisateurs' },
+            { id: 'moderation', icon: Shield, label: 'Modération' },
+            { id: 'chat', icon: MessageSquare, label: 'Messages' },
+            { id: 'logs', icon: Activity, label: 'Logs' },
+            { id: 'streams', icon: Video, label: 'Streams' },
+            { id: 'discord', icon: Globe, label: 'Discord' },
+            { id: 'settings', icon: Settings, label: 'Paramètres' }
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex items-center gap-2 px-6 py-3 rounded-xl font-medium transition-all whitespace-nowrap ${
+                activeTab === tab.id
+                  ? 'bg-gradient-to-r from-cyan-500/20 to-purple-500/20 text-white border border-cyan-500/30'
+                  : 'bg-slate-800/50 text-slate-400 hover:bg-slate-800 border border-slate-700/50'
+              }`}
+            >
+              <tab.icon className="h-5 w-5" />
+              {tab.label}
+            </button>
           ))}
         </div>
-      </div>
-    </div>
-  );
 
-  const renderUsers = () => (
-    <div className="space-y-6">
-      {/* Toolbar */}
-      <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-4">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex items-center space-x-3">
-            <div className="relative flex-1 md:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Rechercher utilisateur, IP..."
-                className="w-full pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20"
-              />
+        {activeTab === 'dashboard' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+                <div className="flex items-center justify-between mb-4">
+                  <Users className="h-8 w-8 text-cyan-400" />
+                  <span className="text-cyan-400 text-sm font-medium">En ligne</span>
+                </div>
+                <div className="text-4xl font-bold mb-2">{stats.totalUsers}</div>
+                <div className="text-slate-400 text-sm">Utilisateurs connectés</div>
+              </div>
+
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+                <div className="flex items-center justify-between mb-4">
+                  <MessageSquare className="h-8 w-8 text-purple-400" />
+                  <span className="text-purple-400 text-sm font-medium">Messages</span>
+                </div>
+                <div className="text-4xl font-bold mb-2">{stats.totalMessages}</div>
+                <div className="text-slate-400 text-sm">Messages envoyés</div>
+              </div>
+
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+                <div className="flex items-center justify-between mb-4">
+                  <Ban className="h-8 w-8 text-red-400" />
+                  <span className="text-red-400 text-sm font-medium">Bans</span>
+                </div>
+                <div className="text-4xl font-bold mb-2">{stats.totalBanned}</div>
+                <div className="text-slate-400 text-sm">Utilisateurs bannis</div>
+              </div>
+
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+                <div className="flex items-center justify-between mb-4">
+                  <VolumeX className="h-8 w-8 text-orange-400" />
+                  <span className="text-orange-400 text-sm font-medium">Mutes</span>
+                </div>
+                <div className="text-4xl font-bold mb-2">{stats.totalMuted}</div>
+                <div className="text-slate-400 text-sm">Utilisateurs muets</div>
+              </div>
             </div>
-            <select
-              value={filterRole}
-              onChange={(e) => setFilterRole(e.target.value)}
-              className="px-4 py-2 bg-slate-800/50 border border-slate-600/50 rounded-lg text-white focus:border-blue-400 focus:outline-none"
-            >
-              <option value="all">Tous les rôles</option>
-              <option value="admin">Admin</option>
-              <option value="moderator">Modérateur</option>
-              <option value="viewer">Viewer</option>
-            </select>
-          </div>
-          <div className="flex items-center space-x-2">
-            {selectedUsers.size > 0 && (
-              <>
-                <span className="text-slate-400 text-sm">{selectedUsers.size} sélectionné(s)</span>
-                <button
-                  onClick={() => handleBulkAction('kick')}
-                  className="px-3 py-2 bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 rounded-lg text-sm font-semibold"
-                >
-                  Kick tous
-                </button>
-                <button
-                  onClick={() => handleBulkAction('mute')}
-                  className="px-3 py-2 bg-yellow-500/20 text-yellow-400 hover:bg-yellow-500/30 rounded-lg text-sm font-semibold"
-                >
-                  Mute tous
-                </button>
-                <button
-                  onClick={() => handleBulkAction('ban')}
-                  className="px-3 py-2 bg-red-500/20 text-red-400 hover:bg-red-500/30 rounded-lg text-sm font-semibold"
-                >
-                  Ban tous
-                </button>
-              </>
-            )}
-            <button
-              onClick={exportUsers}
-              className="px-4 py-2 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-lg font-semibold flex items-center space-x-2"
-            >
-              <Download className="h-4 w-4" />
-              <span>Export</span>
-            </button>
-          </div>
-        </div>
-      </div>
 
-      {/* Users Table */}
-      <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-xl overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-slate-800/50">
-              <tr>
-                <th className="px-4 py-3 text-left">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <Video className="h-6 w-6 text-cyan-400" />
+                  Statistiques Stream
+                </h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl">
+                    <span className="text-slate-400">Status</span>
+                    <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                      streamStats.isLive
+                        ? 'bg-green-500/20 text-green-400'
+                        : 'bg-red-500/20 text-red-400'
+                    }`}>
+                      {streamStats.isLive ? 'Live' : 'Offline'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl">
+                    <span className="text-slate-400">Viewers actuels</span>
+                    <span className="text-2xl font-bold text-cyan-400">{streamStats.currentViewers}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl">
+                    <span className="text-slate-400">Total streams</span>
+                    <span className="text-2xl font-bold">{streamStats.totalStreams}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl">
+                    <span className="text-slate-400">Peak viewers</span>
+                    <span className="text-2xl font-bold text-purple-400">{streamStats.peakViewers}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <Crown className="h-6 w-6 text-yellow-400" />
+                  Répartition des Rôles
+                </h3>
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl border-l-4 border-red-500">
+                    <div className="flex items-center gap-3">
+                      <Shield className="h-6 w-6 text-red-400" />
+                      <span className="font-medium">Administrateurs</span>
+                    </div>
+                    <span className="text-2xl font-bold text-red-400">{stats.adminCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl border-l-4 border-purple-500">
+                    <div className="flex items-center gap-3">
+                      <UserCheck className="h-6 w-6 text-purple-400" />
+                      <span className="font-medium">Modérateurs</span>
+                    </div>
+                    <span className="text-2xl font-bold text-purple-400">{stats.moderatorCount}</span>
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl border-l-4 border-slate-500">
+                    <div className="flex items-center gap-3">
+                      <Eye className="h-6 w-6 text-slate-400" />
+                      <span className="font-medium">Viewers</span>
+                    </div>
+                    <span className="text-2xl font-bold text-slate-400">{stats.viewerCount}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+              <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                <Activity className="h-6 w-6 text-green-400" />
+                Activité Récente
+              </h3>
+              <div className="space-y-3 max-h-[400px] overflow-y-auto">
+                {activityLogs.slice(0, 10).map(log => (
+                  <div key={log.id} className="p-4 bg-slate-900/50 rounded-xl flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className={`px-3 py-1 rounded-full text-xs font-medium border ${severityColors[log.severity]}`}>
+                        {log.severity}
+                      </div>
+                      <div>
+                        <div className="font-medium">{log.action_type}</div>
+                        <div className="text-sm text-slate-400">
+                          {log.username} - {log.details}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="text-sm text-slate-400">
+                      {new Date(log.created_at).toLocaleTimeString()}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'users' && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
                   <input
-                    type="checkbox"
-                    checked={selectedUsers.size === filteredUsers.length && filteredUsers.length > 0}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setSelectedUsers(new Set(filteredUsers.map(u => u.id)));
-                      } else {
-                        setSelectedUsers(new Set());
-                      }
-                    }}
-                    className="rounded border-slate-600"
+                    type="text"
+                    placeholder="Rechercher un utilisateur..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-12 pr-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
                   />
-                </th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Utilisateur</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase">IP / Fingerprint</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Connexion</th>
-                <th className="px-6 py-3 text-left text-xs font-semibold text-slate-400 uppercase">Rôle</th>
-                <th className="px-6 py-3 text-right text-xs font-semibold text-slate-400 uppercase">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-700/50">
-              {filteredUsers.map(user => (
-                <tr key={user.id} className="hover:bg-slate-800/30 transition-colors">
-                  <td className="px-4 py-3">
-                    <input
-                      type="checkbox"
-                      checked={selectedUsers.has(user.id)}
-                      onChange={(e) => {
-                        const newSelected = new Set(selectedUsers);
-                        if (e.target.checked) {
-                          newSelected.add(user.id);
-                        } else {
-                          newSelected.delete(user.id);
-                        }
-                        setSelectedUsers(newSelected);
-                      }}
-                      className="rounded border-slate-600"
-                    />
-                  </td>
-                  <td className="px-6 py-3">
-                    <div className="flex items-center space-x-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-cyan-500 rounded-full flex items-center justify-center">
-                        <span className="text-white font-bold">{user.username[0].toUpperCase()}</span>
-                      </div>
-                      <div>
-                        <div className="text-white font-semibold">{user.username}</div>
-                        <div className="text-slate-400 text-xs">ID: {user.id.slice(0, 8)}...</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td className="px-6 py-3">
-                    <div className="text-slate-300 font-mono text-sm">{user.ip}</div>
-                    <div className="text-slate-500 text-xs font-mono">{user.fingerprint.slice(0, 12)}...</div>
-                  </td>
-                  <td className="px-6 py-3 text-slate-400 text-sm">
-                    <div>{formatTime(user.connectTime)}</div>
-                    <div className="text-xs text-slate-500">
-                      {Math.floor((Date.now() - new Date(user.connectTime).getTime()) / 60000)}m
-                    </div>
-                  </td>
-                  <td className="px-6 py-3">
-                    <span className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                      user.role === 'admin' ? 'bg-red-500/20 text-red-400' :
-                      user.role === 'moderator' ? 'bg-purple-500/20 text-purple-400' :
-                      'bg-slate-500/20 text-slate-400'
-                    }`}>
-                      {user.role || 'viewer'}
-                    </span>
-                  </td>
-                  <td className="px-6 py-3">
-                    <div className="flex items-center justify-end space-x-2">
-                      <button
-                        onClick={() => handleMuteUser(user)}
-                        disabled={isLoading}
-                        className="p-2 text-yellow-400 hover:bg-yellow-500/10 rounded-lg transition-colors disabled:opacity-50"
-                        title="Mute"
-                      >
-                        <VolumeX className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleKickUser(user)}
-                        disabled={isLoading}
-                        className="p-2 text-orange-400 hover:bg-orange-500/10 rounded-lg transition-colors disabled:opacity-50"
-                        title="Kick"
-                      >
-                        <UserX className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => handleBanUser(user)}
-                        disabled={isLoading}
-                        className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
-                        title="Ban"
-                      >
-                        <Ban className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-          {filteredUsers.length === 0 && (
-            <div className="text-center py-12">
-              <Users className="h-12 w-12 mx-auto mb-3 text-slate-600" />
-              <p className="text-slate-500">Aucun utilisateur trouvé</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Recent Messages */}
-      <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">
-        <h3 className="text-xl font-bold text-white mb-4 flex items-center">
-          <MessageSquare className="h-5 w-5 mr-2 text-blue-400" />
-          Messages Récents
-        </h3>
-        <div className="space-y-2 max-h-96 overflow-y-auto">
-          {chatMessages.slice(-20).reverse().map(msg => (
-            <div key={msg.id} className="bg-slate-800/50 rounded-lg p-3 flex items-start justify-between hover:bg-slate-800/70 transition-colors">
-              <div className="flex-1">
-                <div className="flex items-center space-x-2 mb-1">
-                  <span className="text-white font-semibold">{msg.username}</span>
-                  <span className="text-slate-500 text-xs">{formatTime(msg.timestamp)}</span>
-                  {msg.role && msg.role !== 'viewer' && (
-                    <span className={`px-2 py-0.5 rounded text-xs font-bold ${
-                      msg.role === 'admin' ? 'bg-red-500/20 text-red-400' :
-                      'bg-purple-500/20 text-purple-400'
-                    }`}>
-                      {msg.role}
-                    </span>
-                  )}
                 </div>
-                <p className="text-slate-300 text-sm">{msg.text}</p>
-              </div>
-              <button
-                onClick={() => handleDeleteMessage(msg.id, msg.username)}
-                className="p-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors ml-3"
-                title="Supprimer"
-              >
-                <Trash2 className="h-4 w-4" />
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderModeration = () => (
-    <div className="space-y-6">
-      {/* Banned Users */}
-      <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold text-white flex items-center">
-            <Ban className="h-5 w-5 mr-2 text-red-400" />
-            Utilisateurs Bannis ({bannedUsers.length})
-          </h3>
-          <button
-            onClick={fetchBannedUsers}
-            className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="space-y-2 max-h-96 overflow-y-auto">
-          {bannedUsers.map(ban => (
-            <div key={ban.id} className="bg-red-500/5 border border-red-500/20 rounded-lg p-4">
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center space-x-3 mb-2">
-                    <div className="w-10 h-10 bg-red-500/20 rounded-full flex items-center justify-center">
-                      <Ban className="h-5 w-5 text-red-400" />
-                    </div>
-                    <div>
-                      <div className="text-white font-semibold">{ban.username}</div>
-                      <div className="text-slate-400 text-xs">Par {ban.banned_by} • {formatTime(new Date(ban.banned_at))}</div>
-                    </div>
-                  </div>
-                  <div className="bg-slate-900/50 rounded-lg p-3 mb-2">
-                    <div className="text-slate-400 text-xs mb-1">Raison:</div>
-                    <div className="text-white text-sm">{ban.reason}</div>
-                  </div>
-                  <div className="flex items-center space-x-4 text-xs">
-                    <span className="text-slate-500">IP: {ban.ip}</span>
-                    <span className="text-slate-500">ID: {ban.fingerprint.slice(0, 8)}...</span>
-                    <span className={`px-2 py-1 rounded font-bold ${
-                      ban.is_permanent ? 'bg-red-500/20 text-red-400' : 'bg-yellow-500/20 text-yellow-400'
-                    }`}>
-                      {ban.is_permanent ? 'Permanent' : 'Temporaire'}
-                    </span>
-                  </div>
-                </div>
-                <button
-                  onClick={() => handleUnbanUser(ban)}
-                  disabled={isLoading}
-                  className="ml-4 p-2 text-green-400 hover:bg-green-500/10 rounded-lg transition-colors disabled:opacity-50"
-                  title="Débannir"
+                <select
+                  value={filterRole}
+                  onChange={(e) => setFilterRole(e.target.value)}
+                  className="px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-cyan-500"
                 >
-                  <Unlock className="h-5 w-5" />
+                  <option value="all">Tous les rôles</option>
+                  <option value="admin">Administrateur</option>
+                  <option value="moderator">Modérateur</option>
+                  <option value="viewer">Viewer</option>
+                </select>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase">Utilisateur</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase">Rôle</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase">IP</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase">Page</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase">Connexion</th>
+                      <th className="px-6 py-4 text-right text-xs font-semibold text-slate-400 uppercase">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredUsers.map(user => (
+                      <tr key={user.socketId} className="border-b border-slate-800 hover:bg-slate-800/50">
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-gradient-to-r from-cyan-500 to-purple-500 flex items-center justify-center">
+                              <span className="text-white font-bold">{user.username[0]}</span>
+                            </div>
+                            <div>
+                              <div className="font-medium">{user.username}</div>
+                              <div className="text-sm text-slate-400">{user.fingerprint?.slice(0, 8)}...</div>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium border ${roleColors[user.role as keyof typeof roleColors]}`}>
+                            {user.role}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 text-slate-400">{user.ip}</td>
+                        <td className="px-6 py-4 text-slate-400">{user.page}</td>
+                        <td className="px-6 py-4 text-slate-400">
+                          {new Date(user.connectTime).toLocaleTimeString()}
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => {
+                                setSelectedUser(user);
+                                setShowPromoteModal(true);
+                              }}
+                              className="p-2 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-lg transition-all"
+                              title="Promouvoir"
+                            >
+                              <Crown className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedUser(user);
+                                setShowMuteModal(true);
+                              }}
+                              className="p-2 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 rounded-lg transition-all"
+                              title="Mute"
+                            >
+                              <VolumeX className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => {
+                                setSelectedUser(user);
+                                setShowBanModal(true);
+                              }}
+                              className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-all"
+                              title="Ban"
+                            >
+                              <Ban className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'moderation' && (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <Ban className="h-6 w-6 text-red-400" />
+                  Utilisateurs Bannis ({bannedUsers.length})
+                </h3>
+                <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                  {bannedUsers.map(ban => (
+                    <div key={ban.id} className="p-4 bg-slate-900/50 rounded-xl border border-red-500/20">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="font-medium">{ban.username}</div>
+                        <button
+                          onClick={() => handleUnbanUser(ban)}
+                          disabled={isLoading}
+                          className="px-3 py-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg text-sm transition-all disabled:opacity-50"
+                        >
+                          Débannir
+                        </button>
+                      </div>
+                      <div className="text-sm text-slate-400 space-y-1">
+                        <div>IP: {ban.ip}</div>
+                        <div>Raison: {ban.reason}</div>
+                        <div>Par: {ban.banned_by}</div>
+                        <div>Date: {new Date(ban.banned_at).toLocaleString()}</div>
+                        {!ban.is_permanent && ban.ban_end_time && (
+                          <div>Expire: {new Date(ban.ban_end_time).toLocaleString()}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+                <h3 className="text-xl font-bold mb-4 flex items-center gap-2">
+                  <VolumeX className="h-6 w-6 text-orange-400" />
+                  Utilisateurs Muets ({mutedUsers.length})
+                </h3>
+                <div className="space-y-3 max-h-[600px] overflow-y-auto">
+                  {mutedUsers.map(mute => (
+                    <div key={mute.id} className="p-4 bg-slate-900/50 rounded-xl border border-orange-500/20">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="font-medium">{mute.username}</div>
+                        <button
+                          onClick={() => handleUnmuteUser(mute)}
+                          disabled={isLoading}
+                          className="px-3 py-1 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg text-sm transition-all disabled:opacity-50"
+                        >
+                          Démute
+                        </button>
+                      </div>
+                      <div className="text-sm text-slate-400 space-y-1">
+                        <div>IP: {mute.ip}</div>
+                        <div>Raison: {mute.reason}</div>
+                        <div>Par: {mute.muted_by}</div>
+                        <div>Mute #{mute.mute_count}</div>
+                        <div>Expire: {new Date(mute.mute_end_time).toLocaleString()}</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'chat' && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Rechercher un message..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-12 pr-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3 max-h-[700px] overflow-y-auto">
+                {filteredMessages.map(msg => (
+                  <div key={msg.id} className="p-4 bg-slate-900/50 rounded-xl flex items-start justify-between gap-4 hover:bg-slate-800/50 transition-all">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className={`px-3 py-1 rounded-full text-xs font-medium border ${roleColors[msg.role as keyof typeof roleColors]}`}>
+                          {msg.role}
+                        </span>
+                        <span className="font-medium">{msg.username}</span>
+                        <span className="text-sm text-slate-400">{formatTime(msg.timestamp)}</span>
+                      </div>
+                      <p className="text-slate-300">{msg.message}</p>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteMessage(msg.id)}
+                      className="p-2 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-lg transition-all shrink-0"
+                      title="Supprimer"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'logs' && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+              <div className="flex items-center gap-4 mb-6">
+                <div className="flex-1 relative">
+                  <Search className="absolute left-4 top-1/2 transform -translate-y-1/2 h-5 w-5 text-slate-400" />
+                  <input
+                    type="text"
+                    placeholder="Rechercher dans les logs..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full pl-12 pr-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500"
+                  />
+                </div>
+                <select
+                  value={filterSeverity}
+                  onChange={(e) => setFilterSeverity(e.target.value)}
+                  className="px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-cyan-500"
+                >
+                  <option value="all">Toutes sévérités</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                  <option value="critical">Critical</option>
+                </select>
+                <button
+                  onClick={handleExportLogs}
+                  className="px-6 py-3 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-xl transition-all flex items-center gap-2"
+                >
+                  <Download className="h-5 w-5" />
+                  Exporter
                 </button>
               </div>
-            </div>
-          ))}
-          {bannedUsers.length === 0 && (
-            <div className="text-center py-12">
-              <CheckCircle className="h-12 w-12 mx-auto mb-3 text-slate-600" />
-              <p className="text-slate-500">Aucun utilisateur banni</p>
-            </div>
-          )}
-        </div>
-      </div>
 
-      {/* Muted Users */}
-      <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-xl font-bold text-white flex items-center">
-            <VolumeX className="h-5 w-5 mr-2 text-yellow-400" />
-            Utilisateurs Mutes ({mutedUsers.length})
-          </h3>
-          <button
-            onClick={fetchMutedUsers}
-            className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
-          >
-            <RefreshCw className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="space-y-2 max-h-96 overflow-y-auto">
-          {mutedUsers.map(mute => {
-            const timeLeft = new Date(mute.mute_end_time).getTime() - Date.now();
-            const minutesLeft = Math.max(0, Math.floor(timeLeft / 60000));
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead>
+                    <tr className="border-b border-slate-700">
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase">Sévérité</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase">Action</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase">Utilisateur</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase">Détails</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase">Admin</th>
+                      <th className="px-6 py-4 text-left text-xs font-semibold text-slate-400 uppercase">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredLogs.map(log => (
+                      <tr key={log.id} className="border-b border-slate-800 hover:bg-slate-800/50">
+                        <td className="px-6 py-4">
+                          <span className={`px-3 py-1 rounded-full text-xs font-medium border ${severityColors[log.severity]}`}>
+                            {log.severity}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4 font-medium">{log.action_type}</td>
+                        <td className="px-6 py-4 text-slate-400">{log.username}</td>
+                        <td className="px-6 py-4 text-slate-400 max-w-md truncate">{log.details}</td>
+                        <td className="px-6 py-4 text-slate-400">{log.admin_username || '-'}</td>
+                        <td className="px-6 py-4 text-slate-400">{new Date(log.created_at).toLocaleString()}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
 
-            return (
-              <div key={mute.id} className="bg-yellow-500/5 border border-yellow-500/20 rounded-lg p-4">
-                <div className="flex items-start justify-between">
-                  <div className="flex-1">
-                    <div className="flex items-center space-x-3 mb-2">
-                      <div className="w-10 h-10 bg-yellow-500/20 rounded-full flex items-center justify-center">
-                        <VolumeX className="h-5 w-5 text-yellow-400" />
-                      </div>
-                      <div>
-                        <div className="text-white font-semibold">{mute.username}</div>
-                        <div className="text-slate-400 text-xs">Par {mute.muted_by} • {formatTime(new Date(mute.muted_at))}</div>
-                      </div>
-                    </div>
-                    <div className="bg-slate-900/50 rounded-lg p-3 mb-2">
-                      <div className="text-slate-400 text-xs mb-1">Raison:</div>
-                      <div className="text-white text-sm">{mute.reason}</div>
-                    </div>
-                    <div className="flex items-center space-x-4 text-xs">
-                      <span className="text-slate-500">Fin: {formatTime(new Date(mute.mute_end_time))}</span>
-                      <span className="px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded font-bold">
-                        {minutesLeft}m restantes
-                      </span>
-                      <span className="text-slate-500">Mute #{mute.mute_count}</span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleUnmuteUser(mute)}
-                    disabled={isLoading}
-                    className="ml-4 p-2 text-green-400 hover:bg-green-500/10 rounded-lg transition-colors disabled:opacity-50"
-                    title="Démute"
-                  >
-                    <Unlock className="h-5 w-5" />
-                  </button>
+        {activeTab === 'streams' && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+              <h3 className="text-xl font-bold mb-6">Statistiques Détaillées</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="p-4 bg-slate-900/50 rounded-xl">
+                  <div className="text-slate-400 text-sm mb-2">Total Streams</div>
+                  <div className="text-3xl font-bold">{streamStats.totalStreams}</div>
+                </div>
+                <div className="p-4 bg-slate-900/50 rounded-xl">
+                  <div className="text-slate-400 text-sm mb-2">Total Vues</div>
+                  <div className="text-3xl font-bold text-cyan-400">{streamStats.totalViews}</div>
+                </div>
+                <div className="p-4 bg-slate-900/50 rounded-xl">
+                  <div className="text-slate-400 text-sm mb-2">Peak Viewers</div>
+                  <div className="text-3xl font-bold text-purple-400">{streamStats.peakViewers}</div>
+                </div>
+                <div className="p-4 bg-slate-900/50 rounded-xl">
+                  <div className="text-slate-400 text-sm mb-2">Durée Moyenne</div>
+                  <div className="text-3xl font-bold text-green-400">{streamStats.avgDuration}m</div>
                 </div>
               </div>
-            );
-          })}
-          {mutedUsers.length === 0 && (
-            <div className="text-center py-12">
-              <CheckCircle className="h-12 w-12 mx-auto mb-3 text-slate-600" />
-              <p className="text-slate-500">Aucun utilisateur mute</p>
             </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-
-  const renderLogs = () => (
-    <div className="space-y-6">
-      {/* Toolbar */}
-      <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-4">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-          <div className="flex items-center space-x-3">
-            <div className="relative flex-1 md:w-64">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                type="text"
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Rechercher logs..."
-                className="w-full pl-10 pr-4 py-2 bg-slate-800/50 border border-slate-600/50 rounded-lg text-white placeholder-slate-400 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/20"
-              />
-            </div>
-            <select
-              value={filterSeverity}
-              onChange={(e) => setFilterSeverity(e.target.value)}
-              className="px-4 py-2 bg-slate-800/50 border border-slate-600/50 rounded-lg text-white focus:border-blue-400 focus:outline-none"
-            >
-              <option value="all">Toutes sévérités</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">High</option>
-              <option value="critical">Critical</option>
-            </select>
           </div>
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={fetchActivityLogs}
-              className="p-2 text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
-              title="Rafraîchir"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </button>
-            <button
-              onClick={exportLogs}
-              className="px-4 py-2 bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 rounded-lg font-semibold flex items-center space-x-2"
-            >
-              <Download className="h-4 w-4" />
-              <span>Export CSV</span>
-            </button>
-          </div>
-        </div>
-      </div>
+        )}
 
-      {/* Logs List */}
-      <div className="space-y-3">
-        {filteredLogs.map(log => (
-          <div key={log.id} className={`rounded-lg p-4 border backdrop-blur-sm transition-all hover:scale-[1.01] ${
-            log.severity === 'critical' ? 'bg-red-500/10 border-red-500/30' :
-            log.severity === 'high' ? 'bg-orange-500/10 border-orange-500/30' :
-            log.severity === 'medium' ? 'bg-yellow-500/10 border-yellow-500/30' :
-            'bg-slate-800/50 border-slate-700/50'
-          }`}>
-            <div className="flex items-start justify-between mb-3">
-              <div className="flex items-center space-x-3">
-                <span className={`px-3 py-1 rounded-full text-xs font-bold ${
-                  log.severity === 'critical' ? 'bg-red-500/20 text-red-400' :
-                  log.severity === 'high' ? 'bg-orange-500/20 text-orange-400' :
-                  log.severity === 'medium' ? 'bg-yellow-500/20 text-yellow-400' :
-                  'bg-slate-500/20 text-slate-400'
-                }`}>
-                  {log.severity.toUpperCase()}
-                </span>
-                <span className="text-white font-bold text-lg">{log.action_type}</span>
-              </div>
-              <div className="flex items-center space-x-2 text-slate-400 text-sm">
-                <Clock className="h-4 w-4" />
-                <span>{formatTime(new Date(log.created_at))}</span>
+        {activeTab === 'discord' && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+              <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
+                <Globe className="h-6 w-6 text-indigo-400" />
+                Intégration Discord
+              </h3>
+
+              <div className="space-y-6">
+                <div className="p-6 bg-slate-900/50 rounded-xl border border-slate-700">
+                  <h4 className="font-bold mb-4">Configuration</h4>
+                  <div className="space-y-4">
+                    <div>
+                      <label className="block text-sm font-medium text-slate-400 mb-2">
+                        Status
+                      </label>
+                      <div className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl ${
+                        systemSettings.discordIntegration
+                          ? 'bg-green-500/20 text-green-400'
+                          : 'bg-red-500/20 text-red-400'
+                      }`}>
+                        <div className={`w-2 h-2 rounded-full ${
+                          systemSettings.discordIntegration ? 'bg-green-400' : 'bg-red-400'
+                        }`} />
+                        {systemSettings.discordIntegration ? 'Actif' : 'Inactif'}
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-400 mb-2">
+                        Server ID
+                      </label>
+                      <input
+                        type="text"
+                        value={systemSettings.discordServerId}
+                        onChange={(e) => setSystemSettings({...systemSettings, discordServerId: e.target.value})}
+                        className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-cyan-500"
+                        placeholder="Votre Server ID Discord"
+                        disabled={!editingSettings}
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-slate-400 mb-2">
+                        Role ID (Viewer)
+                      </label>
+                      <input
+                        type="text"
+                        value={systemSettings.discordRoleId}
+                        onChange={(e) => setSystemSettings({...systemSettings, discordRoleId: e.target.value})}
+                        className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-cyan-500"
+                        placeholder="Role ID pour les viewers"
+                        disabled={!editingSettings}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-6 bg-slate-900/50 rounded-xl border border-slate-700">
+                  <h4 className="font-bold mb-4">Commandes Discord</h4>
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                      <code className="text-cyan-400">/account</code>
+                      <span className="text-sm text-slate-400">Créer un compte</span>
+                    </div>
+                    <div className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                      <code className="text-cyan-400">/ping</code>
+                      <span className="text-sm text-slate-400">Test du bot</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
+          </div>
+        )}
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-3">
-              <div>
-                <div className="text-slate-500 text-xs mb-1">Utilisateur</div>
-                <div className="text-white font-semibold">{log.username || 'N/A'}</div>
+        {activeTab === 'settings' && (
+          <div className="space-y-6">
+            <div className="bg-gradient-to-br from-slate-800 to-slate-900 rounded-2xl p-6 border border-slate-700">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-xl font-bold flex items-center gap-2">
+                  <Settings className="h-6 w-6 text-cyan-400" />
+                  Paramètres Système
+                </h3>
+                {editingSettings ? (
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setEditingSettings(false)}
+                      className="px-4 py-2 bg-slate-700 hover:bg-slate-600 rounded-lg transition-all flex items-center gap-2"
+                    >
+                      <CloseIcon className="h-4 w-4" />
+                      Annuler
+                    </button>
+                    <button
+                      onClick={handleSaveSettings}
+                      disabled={isLoading}
+                      className="px-4 py-2 bg-green-500/20 hover:bg-green-500/30 text-green-400 rounded-lg transition-all flex items-center gap-2 disabled:opacity-50"
+                    >
+                      <Save className="h-4 w-4" />
+                      Sauvegarder
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setEditingSettings(true)}
+                    className="px-4 py-2 bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-400 rounded-lg transition-all flex items-center gap-2"
+                  >
+                    <Edit className="h-4 w-4" />
+                    Modifier
+                  </button>
+                )}
               </div>
-              <div>
-                <div className="text-slate-500 text-xs mb-1">IP</div>
-                <div className="text-white font-mono text-sm">{log.ip_address || 'N/A'}</div>
-              </div>
-              <div>
-                <div className="text-slate-500 text-xs mb-1">Empreinte</div>
-                <div className="text-white font-mono text-sm">{log.fingerprint ? `${log.fingerprint.slice(0, 8)}...` : 'N/A'}</div>
-              </div>
-              <div>
-                <div className="text-slate-500 text-xs mb-1">Admin</div>
-                <div className="text-white font-semibold">{log.admin_username || 'System'}</div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2">
+                      Viewers Maximum
+                    </label>
+                    <input
+                      type="number"
+                      value={systemSettings.maxViewers}
+                      onChange={(e) => setSystemSettings({...systemSettings, maxViewers: parseInt(e.target.value)})}
+                      className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-cyan-500"
+                      disabled={!editingSettings}
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-2">
+                      Qualité Stream
+                    </label>
+                    <select
+                      value={systemSettings.streamQuality}
+                      onChange={(e) => setSystemSettings({...systemSettings, streamQuality: e.target.value})}
+                      className="w-full px-4 py-3 bg-slate-900 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-cyan-500"
+                      disabled={!editingSettings}
+                    >
+                      <option value="720p">720p</option>
+                      <option value="1080p">1080p</option>
+                      <option value="1440p">1440p</option>
+                      <option value="4K">4K</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl">
+                    <div>
+                      <div className="font-medium">Chat</div>
+                      <div className="text-sm text-slate-400">Activer le chat global</div>
+                    </div>
+                    <button
+                      onClick={() => editingSettings && setSystemSettings({...systemSettings, chatEnabled: !systemSettings.chatEnabled})}
+                      className={`relative w-14 h-7 rounded-full transition-all ${
+                        systemSettings.chatEnabled ? 'bg-green-500' : 'bg-slate-600'
+                      } ${!editingSettings && 'opacity-50 cursor-not-allowed'}`}
+                      disabled={!editingSettings}
+                    >
+                      <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                        systemSettings.chatEnabled && 'transform translate-x-7'
+                      }`} />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl">
+                    <div>
+                      <div className="font-medium">Inscriptions</div>
+                      <div className="text-sm text-slate-400">Autoriser les nouveaux comptes</div>
+                    </div>
+                    <button
+                      onClick={() => editingSettings && setSystemSettings({...systemSettings, registrationEnabled: !systemSettings.registrationEnabled})}
+                      className={`relative w-14 h-7 rounded-full transition-all ${
+                        systemSettings.registrationEnabled ? 'bg-green-500' : 'bg-slate-600'
+                      } ${!editingSettings && 'opacity-50 cursor-not-allowed'}`}
+                      disabled={!editingSettings}
+                    >
+                      <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                        systemSettings.registrationEnabled && 'transform translate-x-7'
+                      }`} />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl">
+                    <div>
+                      <div className="font-medium">Mode Maintenance</div>
+                      <div className="text-sm text-slate-400">Site en maintenance</div>
+                    </div>
+                    <button
+                      onClick={() => editingSettings && setSystemSettings({...systemSettings, maintenanceMode: !systemSettings.maintenanceMode})}
+                      className={`relative w-14 h-7 rounded-full transition-all ${
+                        systemSettings.maintenanceMode ? 'bg-orange-500' : 'bg-slate-600'
+                      } ${!editingSettings && 'opacity-50 cursor-not-allowed'}`}
+                      disabled={!editingSettings}
+                    >
+                      <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                        systemSettings.maintenanceMode && 'transform translate-x-7'
+                      }`} />
+                    </button>
+                  </div>
+
+                  <div className="flex items-center justify-between p-4 bg-slate-900/50 rounded-xl">
+                    <div>
+                      <div className="font-medium">Intégration Discord</div>
+                      <div className="text-sm text-slate-400">Activer le bot Discord</div>
+                    </div>
+                    <button
+                      onClick={() => editingSettings && setSystemSettings({...systemSettings, discordIntegration: !systemSettings.discordIntegration})}
+                      className={`relative w-14 h-7 rounded-full transition-all ${
+                        systemSettings.discordIntegration ? 'bg-indigo-500' : 'bg-slate-600'
+                      } ${!editingSettings && 'opacity-50 cursor-not-allowed'}`}
+                      disabled={!editingSettings}
+                    >
+                      <div className={`absolute top-1 left-1 w-5 h-5 bg-white rounded-full transition-transform ${
+                        systemSettings.discordIntegration && 'transform translate-x-7'
+                      }`} />
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
-
-            {log.details && Object.keys(log.details).length > 0 && (
-              <div className="bg-slate-900/50 rounded-lg p-3">
-                <div className="text-slate-400 text-xs mb-2">Détails:</div>
-                <pre className="text-slate-300 text-xs overflow-x-auto">
-                  {JSON.stringify(log.details, null, 2)}
-                </pre>
-              </div>
-            )}
-          </div>
-        ))}
-
-        {filteredLogs.length === 0 && (
-          <div className="text-center py-12">
-            <FileText className="h-12 w-12 mx-auto mb-3 text-slate-600" />
-            <p className="text-slate-500">Aucun log trouvé</p>
           </div>
         )}
       </div>
-    </div>
-  );
 
-  const tabs = [
-    { id: 'dashboard', label: 'Dashboard', icon: BarChart3 },
-    { id: 'users', label: 'Utilisateurs', icon: Users },
-    { id: 'moderation', label: 'Modération', icon: Shield },
-    { id: 'logs', label: 'Logs', icon: Activity },
-    { id: 'settings', label: 'Paramètres', icon: Settings }
-  ];
+      {showBanModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl p-6 max-w-md w-full border border-slate-700">
+            <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
+              <Ban className="h-6 w-6 text-red-400" />
+              Bannir {selectedUser?.username}
+            </h3>
 
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 p-6">
-      <div className="max-w-7xl mx-auto">
-        {/* Header */}
-        <div className="mb-6">
-          <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 shadow-xl">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center space-x-4">
-                <div className="w-16 h-16 bg-gradient-to-br from-red-500 via-orange-500 to-yellow-500 rounded-2xl flex items-center justify-center shadow-lg">
-                  <Crown className="h-8 w-8 text-white" />
-                </div>
-                <div>
-                  <h1 className="text-3xl font-black text-transparent bg-clip-text bg-gradient-to-r from-red-400 via-orange-400 to-yellow-400">
-                    PANNEAU ADMIN
-                  </h1>
-                  <p className="text-slate-400 font-medium">Contrôle et surveillance en temps réel</p>
-                </div>
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-2">
+                  Raison
+                </label>
+                <textarea
+                  value={banReason}
+                  onChange={(e) => setBanReason(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-red-500 resize-none"
+                  rows={3}
+                  placeholder="Raison du ban..."
+                />
               </div>
-              <div className="flex items-center space-x-4">
-                <button
-                  onClick={() => setAutoRefresh(!autoRefresh)}
-                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg font-semibold transition-all ${
-                    autoRefresh
-                      ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                      : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700/70'
-                  }`}
+
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-2">
+                  Durée
+                </label>
+                <select
+                  value={banDuration}
+                  onChange={(e) => setBanDuration(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-red-500"
                 >
-                  <RefreshCw className={`h-4 w-4 ${autoRefresh ? 'animate-spin' : ''}`} />
-                  <span>{autoRefresh ? 'Auto-Sync ON' : 'Auto-Sync OFF'}</span>
-                </button>
-                <div className="text-right">
-                  <div className="text-white font-semibold">{currentUser?.username}</div>
-                  <div className="text-slate-400 text-sm">Administrateur</div>
-                </div>
+                  <option value="1">1 heure</option>
+                  <option value="24">24 heures</option>
+                  <option value="168">7 jours</option>
+                  <option value="720">30 jours</option>
+                  <option value="permanent">Permanent</option>
+                </select>
               </div>
             </div>
-          </div>
-        </div>
 
-        {/* Navigation */}
-        <div className="bg-slate-900/50 backdrop-blur-xl border border-slate-700/50 rounded-xl p-2 mb-6 shadow-lg">
-          <div className="flex flex-wrap gap-2">
-            {tabs.map((tab) => (
+            <div className="flex gap-3">
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id as any)}
-                className={`flex items-center space-x-2 px-5 py-3 rounded-lg font-semibold transition-all ${
-                  activeTab === tab.id
-                    ? 'bg-gradient-to-r from-blue-500 to-cyan-500 text-white shadow-lg'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-                }`}
+                onClick={() => {
+                  setShowBanModal(false);
+                  setBanReason('');
+                  setSelectedUser(null);
+                }}
+                className="flex-1 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl transition-all"
               >
-                <tab.icon className="h-5 w-5" />
-                <span>{tab.label}</span>
+                Annuler
               </button>
-            ))}
+              <button
+                onClick={handleBanUser}
+                disabled={isLoading || !banReason}
+                className="flex-1 px-6 py-3 bg-red-500/20 hover:bg-red-500/30 text-red-400 rounded-xl transition-all disabled:opacity-50"
+              >
+                Bannir
+              </button>
+            </div>
           </div>
         </div>
+      )}
 
-        {/* Content */}
-        <div className="animate-in fade-in-0 duration-300">
-          {activeTab === 'dashboard' && renderDashboard()}
-          {activeTab === 'users' && renderUsers()}
-          {activeTab === 'moderation' && renderModeration()}
-          {activeTab === 'logs' && renderLogs()}
-          {activeTab === 'settings' && (
-            <div className="bg-slate-900/50 backdrop-blur-sm border border-slate-700/50 rounded-xl p-8">
-              <h3 className="text-2xl font-bold text-white mb-6 flex items-center">
-                <Settings className="h-6 w-6 mr-3 text-slate-400" />
-                Paramètres Système
-              </h3>
-              <div className="text-center py-12">
-                <Terminal className="h-16 w-16 mx-auto mb-4 text-slate-600" />
-                <p className="text-slate-400 text-lg">Fonctionnalités à venir...</p>
+      {showMuteModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl p-6 max-w-md w-full border border-slate-700">
+            <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
+              <VolumeX className="h-6 w-6 text-orange-400" />
+              Mute {selectedUser?.username}
+            </h3>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-2">
+                  Raison
+                </label>
+                <textarea
+                  value={muteReason}
+                  onChange={(e) => setMuteReason(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:border-orange-500 resize-none"
+                  rows={3}
+                  placeholder="Raison du mute..."
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-2">
+                  Durée (minutes)
+                </label>
+                <select
+                  value={muteDuration}
+                  onChange={(e) => setMuteDuration(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-orange-500"
+                >
+                  <option value="5">5 minutes</option>
+                  <option value="30">30 minutes</option>
+                  <option value="60">1 heure</option>
+                  <option value="1440">24 heures</option>
+                </select>
               </div>
             </div>
-          )}
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowMuteModal(false);
+                  setMuteReason('');
+                  setSelectedUser(null);
+                }}
+                className="flex-1 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl transition-all"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handleMuteUser}
+                disabled={isLoading || !muteReason}
+                className="flex-1 px-6 py-3 bg-orange-500/20 hover:bg-orange-500/30 text-orange-400 rounded-xl transition-all disabled:opacity-50"
+              >
+                Mute
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )}
+
+      {showPromoteModal && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 rounded-2xl p-6 max-w-md w-full border border-slate-700">
+            <h3 className="text-2xl font-bold mb-4 flex items-center gap-2">
+              <Crown className="h-6 w-6 text-yellow-400" />
+              Promouvoir {selectedUser?.username}
+            </h3>
+
+            <div className="space-y-4 mb-6">
+              <div>
+                <label className="block text-sm font-medium text-slate-400 mb-2">
+                  Nouveau Rôle
+                </label>
+                <select
+                  value={promoteRole}
+                  onChange={(e) => setPromoteRole(e.target.value)}
+                  className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white focus:outline-none focus:border-purple-500"
+                >
+                  <option value="viewer">Viewer</option>
+                  <option value="moderator">Modérateur</option>
+                  <option value="admin">Administrateur</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => {
+                  setShowPromoteModal(false);
+                  setSelectedUser(null);
+                }}
+                className="flex-1 px-6 py-3 bg-slate-700 hover:bg-slate-600 rounded-xl transition-all"
+              >
+                Annuler
+              </button>
+              <button
+                onClick={handlePromoteUser}
+                disabled={isLoading}
+                className="flex-1 px-6 py-3 bg-purple-500/20 hover:bg-purple-500/30 text-purple-400 rounded-xl transition-all disabled:opacity-50"
+              >
+                Promouvoir
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
