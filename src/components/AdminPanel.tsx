@@ -33,7 +33,6 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
   });
 
   useEffect(() => {
-    // Charger les sources de stream depuis localStorage
     const savedSources = localStorage.getItem('streamSources');
     if (savedSources) {
       const sources = JSON.parse(savedSources);
@@ -45,25 +44,31 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
       }
     }
 
-    // Charger les logs de sécurité
     const savedLogs = localStorage.getItem('securityLogs');
     if (savedLogs) {
       setSecurityLogs(JSON.parse(savedLogs));
     }
+  }, [onStreamSourceChange]);
 
-    // Simuler les statistiques système
+  useEffect(() => {
     const interval = setInterval(() => {
       setSystemStats(prev => ({
         ...prev,
         uptime: prev.uptime + 1,
-        totalConnections: connectedUsers.length,
-        activeStreams: streamSources.filter(s => s.isActive).length,
-        securityAlerts: securityLogs.filter(log => log.severity === 'high' || log.severity === 'critical').length
+        totalConnections: connectedUsers.length
       }));
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [connectedUsers.length, streamSources, securityLogs, onStreamSourceChange]);
+  }, [connectedUsers.length]);
+
+  useEffect(() => {
+    setSystemStats(prev => ({
+      ...prev,
+      activeStreams: streamSources.filter(s => s.isActive).length,
+      securityAlerts: securityLogs.filter(log => log.severity === 'high' || log.severity === 'critical').length
+    }));
+  }, [streamSources, securityLogs]);
 
   const addStreamSource = () => {
     if (!newSourceUrl.trim() || !newSourceName.trim()) {

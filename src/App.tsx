@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Shield, Crown, LogOut, Users, Radio, Zap, Globe, Lock, Activity } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Shield, Crown, LogOut, Users, Radio, Zap, Globe, Lock, Activity, WifiOff } from 'lucide-react';
 import AuthPage from './components/AuthPage';
 import AdminPanel from './components/AdminPanel';
 import StreamPlayer from './components/StreamPlayer';
@@ -197,9 +197,9 @@ function App() {
     setCurrentPage('home');
   };
 
-  const handleStreamSourceChange = (source: StreamSource | null) => {
+  const handleStreamSourceChange = useCallback((source: StreamSource | null) => {
     setCurrentStreamSource(source);
-  };
+  }, []);
 
   // Modal d'accès admin moderne
   if (showAdminPrompt) {
@@ -341,6 +341,33 @@ function App() {
           </div>
         </div>
       </nav>
+
+      {/* Message d'avertissement WebSocket */}
+      {(wsConnectionStatus === 'disconnected' || wsConnectionStatus === 'error') && (
+        <div className="bg-red-500/10 border-b border-red-500/30 backdrop-blur-sm">
+          <div className="max-w-7xl mx-auto px-6 py-3">
+            <div className="flex items-center justify-center space-x-3">
+              <WifiOff className="h-5 w-5 text-red-400" />
+              <p className="text-red-300 text-sm font-medium">
+                Le serveur WebSocket n'est pas disponible. Veuillez démarrer le serveur: <code className="bg-red-500/20 px-2 py-1 rounded font-mono text-xs">cd server && npm start</code>
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {wsConnectionStatus === 'connecting' && (
+        <div className="bg-yellow-500/10 border-b border-yellow-500/30 backdrop-blur-sm">
+          <div className="max-w-7xl mx-auto px-6 py-3">
+            <div className="flex items-center justify-center space-x-3">
+              <div className="animate-spin rounded-full h-4 w-4 border-2 border-yellow-400 border-t-transparent"></div>
+              <p className="text-yellow-300 text-sm font-medium">
+                Connexion au serveur WebSocket en cours...
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Contenu principal */}
       <main className="animate-in fade-in-0 duration-500">
