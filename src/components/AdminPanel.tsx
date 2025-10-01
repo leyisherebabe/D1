@@ -1,12 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import {
-  Shield, Users, Activity, Settings, Ban, VolumeX, Trash2, Eye, Crown, Search,
-  Clock, AlertTriangle, UserX, MessageSquare, Download, Filter, RefreshCw,
-  TrendingUp, BarChart3, Zap, Globe, Terminal, Lock, Unlock, AlertCircle,
-  CheckCircle, XCircle, Play, Pause, Radio, Video, UserCheck, UserPlus,
-  Calendar, Server, Database, Wifi, WifiOff, Info, FileText, Mail, Key,
-  Edit, Save, X as CloseIcon, Bell, Send, Megaphone, Target, List
-} from 'lucide-react';
+import { Shield, Users, Activity, Settings, Ban, VolumeX, Trash2, Eye, Crown, Search, Clock, TriangleAlert as AlertTriangle, UserX, MessageSquare, Download, Filter, RefreshCw, TrendingUp, ChartBar as BarChart3, Zap, Globe, Terminal, Lock, Clock as Unlock, CircleAlert as AlertCircle, CircleCheck as CheckCircle, Circle as XCircle, Play, Pause, Radio, Video, UserCheck, UserPlus, Calendar, Server, Database, Wifi, WifiOff, Info, FileText, Mail, Key, CreditCard as Edit, Save, X as CloseIcon, Bell, Send, Megaphone, Target, List } from 'lucide-react';
 import { ConnectedUser, ChatMessage, StreamSource } from '../types';
 import { formatTime } from '../utils';
 import {
