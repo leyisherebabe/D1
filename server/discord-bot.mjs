@@ -1,10 +1,10 @@
 import { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder } from 'discord.js';
 import bcrypt from 'bcryptjs';
-import Database from './lib/database.mjs';
+import { getDatabase } from './lib/db-instance.mjs';
 import { randomBytes } from 'crypto';
 import { SERVER_CONFIG } from './config.mjs';
 
-const db = new Database();
+const db = getDatabase();
 
 const client = new Client({
   intents: [
@@ -88,7 +88,7 @@ async function createTemporaryAccount(discordUserId, discordUsername) {
   }
 }
 
-client.once('ready', () => {
+client.once('clientReady', () => {
   console.log(`✅ Bot Discord connecté: ${client.user.tag}`);
   console.log('🤖 Commandes disponibles: /account');
 

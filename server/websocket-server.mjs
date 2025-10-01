@@ -2,11 +2,11 @@ import { WebSocketServer } from 'ws';
 import { createServer } from 'http';
 import crypto from 'crypto';
 import bcrypt from 'bcrypt';
-import Database from './lib/database.mjs';
+import { getDatabase } from './lib/db-instance.mjs';
 import Logger from './lib/logger.mjs';
 import { SERVER_CONFIG } from './config.mjs';
 
-const db = new Database();
+const db = getDatabase();
 const logger = new Logger(SERVER_CONFIG.DISCORD_WEBHOOK_URL);
 
 const server = createServer();
