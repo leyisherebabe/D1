@@ -24,32 +24,7 @@ const HomePage: React.FC<HomePageProps> = ({ activeUsers }) => { // Acceptez la 
   });
 
   useEffect(() => {
-    const checkActiveStream = () => {
-      // Ne pas afficher de faux stream - toujours offline par défaut
-      const isStreamActive = true;
-      
-      if (isStreamActive) {
-        setCurrentStream({
-          id: 'stream_' + Date.now(),
-          title: 'Stream Anonyme en Direct',
-          thumbnail: 'https://images.pexels.com/photos/1763075/pexels-photo-1763075.jpeg?auto=compress&cs=tinysrgb&w=800&h=450&dpr=1',
-          startTime: new Date(Date.now() - Math.random() * 3600000),
-          viewers: Math.floor(Math.random() * 100) + 10
-        });
-        setStreamStats(prev => ({
-          ...prev,
-          status: 'live',
-          viewers: Math.floor(Math.random() * 100) + 10
-        }));
-      } else {
-        setCurrentStream(null);
-        setStreamStats(prev => ({ ...prev, status: 'offline', viewers: 0 }));
-      }
-    };
-
-    checkActiveStream();
-    const interval = setInterval(checkActiveStream, 30000);
-    return () => clearInterval(interval);
+    setStreamStats(prev => ({ ...prev, status: 'offline', viewers: 0 }));
   }, []);
 
   useEffect(() => {

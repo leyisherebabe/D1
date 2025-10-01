@@ -37,7 +37,7 @@ function App() {
       try {
         switch (data.type) {
           case 'user_count':
-            setActiveUsers(data.count);
+            setActiveUsers(prev => prev !== data.count ? data.count : prev);
             break;
           case 'user_list':
             const users = data.users.map((user: any) => ({
@@ -46,7 +46,7 @@ function App() {
               lastActivity: new Date(user.lastActivity),
               muteEndTime: user.muteEndTime ? new Date(user.muteEndTime) : null
             }));
-            setConnectedUsers(users);
+            setConnectedUsers(prev => JSON.stringify(prev) !== JSON.stringify(users) ? users : prev);
             break;
           case 'chat_message':
             if (data.message) {
