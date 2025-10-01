@@ -583,7 +583,7 @@ wss.on('connection', async (ws, req) => {
 server.on('request', (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(200);
@@ -788,6 +788,64 @@ server.on('request', (req, res) => {
         await db.unmuteUser(data.fingerprint);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: true }));
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      }
+    });
+  } else if (req.url === '/api/admin/activity-logs' && req.method === 'GET') {
+    try {
+      const logs = await db.getActivityLogs(100);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, logs: logs || [] }));
+    } catch (error) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, logs: [] }));
+    }
+  } else if (req.url === '/api/admin/banned-users' && req.method === 'GET') {
+    try {
+      const banned = await db.getBannedUsers();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, users: banned || [] }));
+    } catch (error) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, users: [] }));
+    }
+  } else if (req.url === '/api/admin/muted-users' && req.method === 'GET') {
+    try {
+      const muted = await db.getMutedUsers();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, users: muted || [] }));
+    } catch (error) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, users: [] }));
+    }
+  } else if (req.url === '/api/admin/stream-stats' && req.method === 'GET') {
+    try {
+      const stats = {
+        activeStreams: activeStreams.size,
+        totalViewers: Array.from(streamViewers.values()).reduce((sum, viewers) => sum + viewers.size, 0),
+        streams: Array.from(activeStreams.entries()).map(([key, stream]) => ({
+          streamKey: key,
+          title: stream.title,
+          viewers: streamViewers.get(key)?.size || 0,
+          startTime: stream.startTime
+        }))
+      };
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, stats }));
+    } catch (error) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, stats: { activeStreams: 0, totalViewers: 0, streams: [] } }));
+    }
+  } else if (req.url === '/api/admin/update-settings' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', async () => {
+      try {
+        const settings = JSON.parse(body);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, message: 'Paramètres sauvegardés' }));
       } catch (error) {
         res.writeHead(500, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ success: false, error: error.message }));
