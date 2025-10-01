@@ -51,7 +51,10 @@ class Database {
         role TEXT DEFAULT 'viewer',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         last_login DATETIME,
-        is_active BOOLEAN DEFAULT 1
+        is_active BOOLEAN DEFAULT 1,
+        discord_id TEXT,
+        discord_username TEXT,
+        expires_at DATETIME
       )`,
 
       `CREATE TABLE IF NOT EXISTS chat_messages (
