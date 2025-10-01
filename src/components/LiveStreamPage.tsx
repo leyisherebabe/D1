@@ -355,4 +355,61 @@ const AdminPage: React.FC<AdminPageProps> = ({
                   </span>
                 )}
                 {message.ip && (
-                  <span className="text-xs text-slate-
+                  <span className="text-xs text-slate-500">
+                    {message.ip}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() => handleDeleteMessage(message.id)}
+                  className="text-red-400 hover:text-red-300 p-1 hover:bg-red-500/20 rounded transition-colors"
+                  title="Supprimer ce message"
+                >
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+            <div className="text-sm text-slate-300">{message.text}</div>
+            <div className="text-xs text-slate-500 mt-2">
+              {new Date(message.timestamp).toLocaleString('fr-FR')}
+            </div>
+            {(message as any).streamKey && (
+              <div className="text-xs text-slate-500 mt-1">
+                Stream: {(message as any).streamKey}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+      <div className="container mx-auto px-6 py-12">
+        <div className="flex items-center justify-between mb-12">
+          <div>
+            <h1 className="text-4xl font-bold bg-gradient-to-r from-blue-400 via-cyan-400 to-teal-400 bg-clip-text text-transparent mb-2">
+              Espace Modérateur
+            </h1>
+            <p className="text-slate-400">Gérez les utilisateurs et le chat</p>
+          </div>
+          <button
+            onClick={onBack}
+            className="px-6 py-3 bg-slate-700/50 hover:bg-slate-600/50 text-white rounded-xl transition-all duration-300 border border-slate-600/50"
+          >
+            ← Retour Admin
+          </button>
+        </div>
+
+        <div className="space-y-8">
+          {renderUsers()}
+          {renderChat()}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default LiveStreamPage;

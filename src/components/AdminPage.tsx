@@ -375,15 +375,10 @@ const AdminPage: React.FC<AdminPageProps> = ({
                   <span className="text-slate-300 capitalize">{page}</span>
                   <span className="text-white font-medium">{count}</span>
                 </div>
-                {/* Afficher le contexte du message */}
-                <div className="text-xs text-slate-500 mt-1">
-                  {message.isSystem ? 'Message système' :
-                   (message as any).streamKey ? `Stream: ${(message as any).streamKey}` : 'Chat global'}
-                </div>
               );
             })}
           </div>
-        <>
+        </div>
       </div>
 
       <div className="glass-dark border border-slate-700/50 rounded-2xl p-8">
@@ -403,7 +398,7 @@ const AdminPage: React.FC<AdminPageProps> = ({
           ))}
         </div>
       </div>
-   
+    </div>
   );
 
   const renderChat = () => (
