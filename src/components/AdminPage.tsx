@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Users, MessageCircle, Activity, Settings, Eye, Ban, Trash2, TriangleAlert as AlertTriangle, CircleCheck as CheckCircle, Circle as XCircle, Plus, CreditCard as Edit, Save, X, Crown, Sparkles, VolumeX, Key, Play, UserCheck, Image, FileText } from 'lucide-react';
+import { Shield, Users, MessageCircle, Activity, Settings, Eye, Ban, Trash2, AlertTriangle, CheckCircle, XCircle, Plus, Edit, Save, X, Crown, Sparkles, VolumeX, Key, Play, UserCheck, Image, FileText } from 'lucide-react';
 import { ChatMessage, ConnectedUser, StreamLog, Report, PopupAnnouncement, StreamKey } from '../types';
 
 interface AdminPageProps {
