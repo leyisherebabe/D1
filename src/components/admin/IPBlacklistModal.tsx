@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Plus, Trash2, Shield, AlertTriangle, Check } from 'lucide-react';
+import { X, Plus, Trash2, Shield, TriangleAlert as AlertTriangle, Check } from 'lucide-react';
 
 interface BlacklistEntry {
   id: string;

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { X, Send, AlertCircle, Info, CheckCircle } from 'lucide-react';
+import { X, Send, CircleAlert as AlertCircle, Info, CircleCheck as CheckCircle } from 'lucide-react';
 
 interface BroadcastModalProps {
   onClose: () => void;
