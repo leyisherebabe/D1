@@ -26,7 +26,8 @@ function App() {
   const [connectedUsers, setConnectedUsers] = useState<ConnectedUser[]>([]);
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [activeUsers, setActiveUsers] = useState(0);
-  
+  const [wsConnectionStatus, setWsConnectionStatus] = useState<'connecting' | 'connected' | 'disconnected' | 'error'>('connecting');
+
   // État du streaming
   const [currentStreamSource, setCurrentStreamSource] = useState<StreamSource | null>(null);
 

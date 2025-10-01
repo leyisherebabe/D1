@@ -1,6 +1,7 @@
 import { ChatMessage } from '../types';
 
 export type MessageCallback = (data: any) => void;
+export type StatusCallback = (status: 'connecting' | 'connected' | 'disconnected' | 'error') => void;
 
 export class WebSocketService {
   public ws: WebSocket | null = null;
@@ -10,22 +11,26 @@ export class WebSocketService {
   private isReconnecting = false;
   private shouldReconnect = true;
   private onMessageCallback: MessageCallback | null = null;
-  
-  constructor(onMessageCallback?: MessageCallback) {
+  private onStatusCallback: StatusCallback | null = null;
+
+  constructor(onMessageCallback?: MessageCallback, onStatusCallback?: StatusCallback) {
     this.onMessageCallback = onMessageCallback || null;
+    this.onStatusCallback = onStatusCallback || null;
   }
 
   connect() {
     try {
+      this.onStatusCallback?.('connecting');
+
       // Construire l'URL WebSocket dynamiquement en fonction de l'environnement
       const host = window.location.host;
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      
+
       let wsUrl: string;
-      
+
       console.log('Current host:', host);
       console.log('Current protocol:', window.location.protocol);
-      
+
       if (host.includes('webcontainer-api.io') || host.includes('ws://localhost:3001')) {
         // Environnement WebContainer
         // Dans WebContainer, remplacer le port 5173 par 3001
@@ -41,15 +46,16 @@ export class WebSocketService {
         wsUrl = `${protocol}//${host}`;
         console.log('Other environment detected, using:', wsUrl);
       }
-      
+
       console.log('Attempting to connect to WebSocket:', wsUrl);
       this.ws = new WebSocket(wsUrl);
-      
+
       this.ws.onopen = () => {
         console.log('WebSocket connected successfully');
         this.reconnectAttempts = 0;
         this.isReconnecting = false;
-        
+        this.onStatusCallback?.('connected');
+
         // Effacer le timeout de reconnexion s'il existe
         if (this.reconnectTimeout) {
           clearTimeout(this.reconnectTimeout);
@@ -74,7 +80,8 @@ export class WebSocketService {
       this.ws.onclose = (event) => {
         console.log('WebSocket closed:', event.code, event.reason, 'wasClean:', event.wasClean);
         this.ws = null;
-        
+        this.onStatusCallback?.('disconnected');
+
         // Tenter une reconnexion si la fermeture est anormale et que nous devons nous reconnecter
         if (this.shouldReconnect && !this.isReconnecting && event.code !== 1000) {
           this.reconnect();
@@ -88,9 +95,11 @@ export class WebSocketService {
           url: this.ws?.url,
           timestamp: new Date().toISOString()
         });
+        this.onStatusCallback?.('error');
       };
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
+      this.onStatusCallback?.('error');
       if (this.shouldReconnect && !this.isReconnecting) {
         this.reconnect();
       }
