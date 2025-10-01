@@ -9,11 +9,13 @@ import {
 } from 'lucide-react';
 import { ConnectedUser, ChatMessage, StreamSource } from '../types';
 import { formatTime } from '../utils';
-import UserProfileModal from './admin/UserProfileModal';
-import BroadcastModal from './admin/BroadcastModal';
-import AutoModRulesModal from './admin/AutoModRulesModal';
-import IPBlacklistModal from './admin/IPBlacklistModal';
-import AnalyticsChart from './admin/AnalyticsChart';
+import {
+  UserProfileModal,
+  BroadcastModal,
+  AutoModRulesModal,
+  IPBlacklistModal,
+  AnalyticsChart
+} from './admin';
 
 interface AdminPanelProps {
   currentUser: any;
