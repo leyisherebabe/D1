@@ -39,6 +39,16 @@ const config = {
         acParam: ['-ab', '128k', '-ac', '2', '-ar', '44100'],
         hls: true,
         hlsFlags: '[hls_time=2:hls_list_size=3:hls_flags=delete_segments]'
+      },
+      {
+        app: '',
+        vc: 'libx264',
+        vcParam: ['-preset', 'ultrafast', '-tune', 'zerolatency', '-g', '50'],
+        ac: 'aac',
+        acParam: ['-ab', '128k', '-ac', '2', '-ar', '44100'],
+        hls: true,
+        hlsFlags: '[hls_time=2:hls_list_size=3:hls_flags=delete_segments]',
+        hlsPath: './media/live'
       }
     ]
   }
