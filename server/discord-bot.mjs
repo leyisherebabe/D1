@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, EmbedBuilder, SlashCommandBuilder } from 'di
 import bcrypt from 'bcryptjs';
 import Database from './lib/database.mjs';
 import { randomBytes } from 'crypto';
+import { SERVER_CONFIG } from './config.mjs';
 
 const db = new Database();
 
@@ -207,10 +208,12 @@ setInterval(cleanupExpiredAccounts, 5 * 60 * 1000);
 client.on('error', console.error);
 client.on('warn', console.warn);
 
-const DISCORD_TOKEN = process.env.DISCORD_BOT_TOKEN;
+const DISCORD_TOKEN = SERVER_CONFIG.DISCORD_BOT_TOKEN;
 
-if (!DISCORD_TOKEN) {
-  console.error('❌ DISCORD_BOT_TOKEN manquant dans .env !');
+if (!DISCORD_TOKEN || DISCORD_TOKEN === 'your_discord_bot_token_here') {
+  console.error('❌ DISCORD_BOT_TOKEN manquant dans config.mjs !');
+  console.error('💡 Ouvrez server/config.mjs et remplacez "your_discord_bot_token_here" par votre token Discord');
+  console.error('💡 Pour obtenir un token: https://discord.com/developers/applications');
   process.exit(1);
 }
 

@@ -1,20 +1,28 @@
 // Configuration serveur - JAMAIS exposée au client
-import 'dotenv/config';
+// Toute la configuration est ici, pas besoin de fichier .env
 
 export const SERVER_CONFIG = {
-  // Clés d'authentification (à déplacer dans .env en production)
-  ENCRYPTION_KEY: process.env.ENCRYPTION_KEY || 'BOLT_ANONYMOUS_2025',
-  ADMIN_ACCESS_CODE: process.env.ADMIN_ACCESS_CODE || 'ADMIN_BOLT_2025',
-  
+  // Clés d'authentification locale
+  ENCRYPTION_KEY: 'BOLT_ANONYMOUS_2025',
+  ADMIN_ACCESS_CODE: 'ADMIN_BOLT_2025',
+
+  // Mots de passe des rôles
   MODERATOR_PASSWORDS: {
-    'mod': process.env.MOD_PASSWORD || 'mod123',
-    'moderator': process.env.MODERATOR_PASSWORD || 'moderator123',
-    'admin': process.env.ADMIN_PASSWORD || 'admin123'
+    'mod': 'mod123',
+    'moderator': 'moderator123',
+    'admin': 'admin123'
   },
-  
+
   // Configuration WebSocket
-  WS_PORT: process.env.WS_PORT || 3001,
-  
-  // Configuration Discord
-  DISCORD_WEBHOOK_URL: process.env.DISCORD_WEBHOOK_URL
+  WS_PORT: 3001,
+
+  // Configuration Discord Bot
+  // Pour obtenir un token:
+  // 1. Allez sur https://discord.com/developers/applications
+  // 2. Créez une application et activez le bot
+  // 3. Copiez le token et remplacez la valeur ci-dessous
+  DISCORD_BOT_TOKEN: 'your_discord_bot_token_here',
+
+  // Discord Webhook (optionnel - laissez null si non utilisé)
+  DISCORD_WEBHOOK_URL: null
 };

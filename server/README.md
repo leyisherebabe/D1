@@ -26,12 +26,26 @@ npm install
 
 ## Configuration
 
-Copiez `.env.example` vers `.env` et configurez les variables.
+Toute la configuration est dans `config.mjs` - pas besoin de fichier `.env` !
+
+**Pour le bot Discord:**
+1. Ouvrez `config.mjs`
+2. Remplacez `'your_discord_bot_token_here'` par votre token Discord
+3. Pour obtenir un token: https://discord.com/developers/applications
+
+**Sans Discord:** Le système fonctionne parfaitement sans bot Discord.
 
 ## Démarrage
 
 ```bash
+# Serveur seul (sans bot Discord)
 npm start
+
+# Serveur + Bot Discord
+npm run dev
+
+# Seulement le bot Discord
+npm run bot
 ```
 
 ## Services
