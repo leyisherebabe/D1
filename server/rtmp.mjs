@@ -142,27 +142,15 @@ function stopHLSConversion(streamKey) {
 }
 
 nms.on('prePublish', (id, streamPath, args) => {
-  console.log('[RTMP] prePublish args:', { id, streamPath, args });
+  const session = id;
+  const actualStreamPath = session.streamPath;
+  const streamKey = session.streamName;
 
-  // Vérifier que streamPath existe
-  if (!streamPath) {
-    console.error('[RTMP] StreamPath undefined!');
-    return;
-  }
-
-  // Nettoyer le streamPath pour extraire la clé
-  let streamKey = streamPath.replace('/live/', '').replace('//', '');
-
-  // Si le streamKey commence par /, le retirer
-  if (streamKey.startsWith('/')) {
-    streamKey = streamKey.substring(1);
-  }
-
-  console.log(`[RTMP] 🔴 Stream démarré: ${streamKey} (path: ${streamPath})`);
+  console.log(`[RTMP] 🔴 Stream démarré: ${streamKey} (path: ${actualStreamPath})`);
 
   activeStreams.set(streamKey, {
-    id: id,
-    streamPath: streamPath,
+    id: session.id,
+    streamPath: actualStreamPath,
     startTime: new Date(),
     isLive: true
   });
@@ -171,21 +159,11 @@ nms.on('prePublish', (id, streamPath, args) => {
 });
 
 nms.on('donePublish', (id, streamPath, args) => {
-  // Vérifier que streamPath existe
-  if (!streamPath) {
-    console.error('[RTMP] StreamPath undefined!');
-    return;
-  }
+  const session = id;
+  const actualStreamPath = session.streamPath;
+  const streamKey = session.streamName;
 
-  // Nettoyer le streamPath pour extraire la clé
-  let streamKey = streamPath.replace('/live/', '').replace('//', '');
-
-  // Si le streamKey commence par /, le retirer
-  if (streamKey.startsWith('/')) {
-    streamKey = streamKey.substring(1);
-  }
-
-  console.log(`[RTMP] ⏹️ Stream arrêté: ${streamKey} (path: ${streamPath})`);
+  console.log(`[RTMP] ⏹️ Stream arrêté: ${streamKey} (path: ${actualStreamPath})`);
 
   if (streamTimeouts.has(streamKey)) {
     clearInterval(streamTimeouts.get(streamKey));
