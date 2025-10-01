@@ -142,6 +142,12 @@ function stopHLSConversion(streamKey) {
 }
 
 nms.on('prePublish', (id, StreamPath, args) => {
+  // Vérifier que StreamPath existe
+  if (!StreamPath) {
+    console.error('[RTMP] StreamPath undefined!');
+    return;
+  }
+
   // Nettoyer le StreamPath pour extraire la clé
   let streamKey = StreamPath.replace('/live/', '').replace('//', '');
 
@@ -163,6 +169,12 @@ nms.on('prePublish', (id, StreamPath, args) => {
 });
 
 nms.on('donePublish', (id, StreamPath, args) => {
+  // Vérifier que StreamPath existe
+  if (!StreamPath) {
+    console.error('[RTMP] StreamPath undefined!');
+    return;
+  }
+
   // Nettoyer le StreamPath pour extraire la clé
   let streamKey = StreamPath.replace('/live/', '').replace('//', '');
 

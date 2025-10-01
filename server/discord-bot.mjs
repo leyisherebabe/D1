@@ -36,7 +36,7 @@ function generateRandomPassword(length = 12) {
 async function createTemporaryAccount(discordUserId, discordUsername) {
   try {
     const existingAccount = await db.get(
-      'SELECT * FROM users WHERE discord_id = ? AND expires_at > CURRENT_TIMESTAMP',
+      `SELECT * FROM users WHERE discord_id = ? AND expires_at > datetime('now')`,
       [discordUserId]
     );
 
@@ -108,7 +108,7 @@ client.on('interactionCreate', async (interaction) => {
   if (!interaction.isChatInputCommand()) return;
 
   if (interaction.commandName === 'account') {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ flags: 64 }); // 64 = EPHEMERAL flag
 
     const result = await createTemporaryAccount(
       interaction.user.id,
@@ -176,7 +176,7 @@ client.on('interactionCreate', async (interaction) => {
 async function cleanupExpiredAccounts() {
   try {
     const expiredAccounts = await db.all(
-      'SELECT * FROM users WHERE expires_at IS NOT NULL AND expires_at <= CURRENT_TIMESTAMP AND is_active = 1'
+      `SELECT * FROM users WHERE expires_at IS NOT NULL AND expires_at <= datetime('now') AND is_active = 1`
     );
 
     for (const account of expiredAccounts) {
