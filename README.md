@@ -1,47 +1,65 @@
-# 🎥 ABD Stream - Plateforme de Streaming Complète
+# 🎥 ABD Stream - Plateforme de Streaming
 
-Une plateforme de streaming moderne avec chat en temps réel, gestion des streams et panel d'administration complet.
+Une plateforme de streaming moderne avec chat en temps réel, support RTMP, et panel d'administration complet, propulsée par Supabase.
 
-## 🚀 Fonctionnalités
+## ✨ Fonctionnalités
 
 ### 🎬 Streaming
-- **Lecteur vidéo intégré** avec contrôles complets
-- **Support HLS/M3U8** pour le streaming adaptatif
-- **Gestion des streams** via panel admin
-- **Qualité adaptative** (Auto, 1080p, 720p, 480p)
+- **Support RTMP** - Streamez directement depuis OBS Studio
+- **Lecteur HLS** - Lecture adaptative avec contrôles complets
+- **Détection automatique** - Les streams sont détectés automatiquement
+- **Multi-streams** - Support de plusieurs streams simultanés
 
-### 💬 Chat Multi-Contextes
-- **Chat global** quand aucun stream n'est actif
-- **Chat par stream** pour chaque stream individuel
-- **Modération en temps réel** (mute, ban, suppression)
-- **Système de signalement** des messages
+### 💬 Chat en Temps Réel
+- **Chat global** - Discussion générale de la plateforme
+- **Chat par stream** - Chat dédié pour chaque stream
+- **Historique persistant** - Stocké dans Supabase
+- **Modération en direct** - Mute et ban en temps réel
 
 ### 👑 Panel Administrateur
-- **Gestion des streams** (création, activation, désactivation)
-- **Upload de fichiers M3U8** pour les streams
-- **Modération des utilisateurs** (ban/unban, mute/unmute)
-- **Gestion des annonces popup**
-- **Statistiques en temps réel**
+- **Gestion des streams** - Créer et gérer les streams
+- **Modération des utilisateurs** - Ban, mute, gestion des rôles
+- **Statistiques en temps réel** - Viewers, messages, activité
+- **Logs de sécurité** - Toutes les actions sont enregistrées
 
 ### 🔒 Sécurité
-- **Authentification sécurisée** avec bcrypt
-- **Système de rôles** (viewer, moderator, admin)
-- **Protection contre le spam** et les abus
-- **Anonymat préservé**
+- **Supabase RLS** - Row Level Security sur toutes les tables
+- **Authentification sécurisée** - Gestion des utilisateurs et rôles
+- **Protection anti-spam** - Système de mute progressif
+- **Fingerprinting** - Identification des utilisateurs
+
+## 🏗️ Architecture
+
+### Backend
+- **Express.js** - Serveur API REST
+- **WebSocket** - Communication en temps réel
+- **Node Media Server** - Serveur RTMP pour OBS
+- **Supabase** - Base de données PostgreSQL avec RLS
+
+### Frontend
+- **React + TypeScript** - Interface utilisateur moderne
+- **Vite** - Build tool rapide
+- **TailwindCSS** - Styling
+- **HLS.js** - Lecture des streams
+
+### Base de Données (Supabase)
+- `profiles` - Profils utilisateurs
+- `streams` - Streams actifs
+- `chat_messages` - Messages du chat
+- `connected_users` - Utilisateurs connectés
+- `banned_users` - Utilisateurs bannis
+- `muted_users` - Utilisateurs mute
 
 ## 📋 Installation
 
-### 1. Prérequis
-- Node.js 18+ 
-- npm ou yarn
+### Prérequis
+- Node.js 18+
+- FFmpeg (pour la conversion RTMP vers HLS)
+- Compte Supabase (déjà configuré)
 
-### 2. Installation des dépendances
+### Installation
 
 ```bash
-# Cloner le projet
-git clone <url-du-repo>
-cd abd-stream
-
 # Installer les dépendances frontend
 npm install
 
@@ -51,216 +69,101 @@ npm install
 cd ..
 ```
 
-### 3. Configuration
+### Configuration
 
-Le fichier `server/.env` contient la configuration :
+Le fichier `.env` contient la configuration Supabase :
 ```env
-# Ports
-WS_PORT=3001
-MEDIA_PORT=8000
-
-# Discord (optionnel)
-DISCORD_WEBHOOK_URL=your_webhook_url
-DISCORD_BOT_TOKEN=your_bot_token
-
-# Base de données
-DB_PATH=./data/database.sqlite
+VITE_SUPABASE_URL=your_supabase_url
+VITE_SUPABASE_SUPABASE_ANON_KEY=your_supabase_anon_key
 ```
 
-## 🎯 Démarrage
+## 🚀 Démarrage
 
-### Méthode Simple (Recommandée)
+### Frontend
 ```bash
-npm run dev:full
+npm run dev
 ```
-Cette commande démarre automatiquement :
-- Frontend React (port 5173)
-- Serveur WebSocket (port 3001) 
-- Serveur média (port 8000)
+Accessible sur http://localhost:5173
 
-### Méthode Manuelle
+### Backend
 ```bash
-# Terminal 1 - Frontend
-npm run dev
-
-# Terminal 2 - Backend WebSocket
+# Terminal 1 - Serveur WebSocket/API
 cd server
-npm run dev
+npm start
 
-# Terminal 3 - Serveur média
+# Terminal 2 - Serveur RTMP
 cd server
-npm run media
+npm run rtmp
 ```
 
-## 🌐 Accès
+### Ports Utilisés
+- **5173** - Frontend (Vite)
+- **3000** - Backend API + WebSocket
+- **1935** - Serveur RTMP (OBS)
+- **8003** - Serveur HTTP pour les fichiers HLS
 
-- **Site web** : http://localhost:5173
-- **Panel Admin** : Ctrl+Shift+A puis code `ADMIN_BOLT_2025`
-- **API WebSocket** : ws://localhost:3001
-- **Serveur média** : http://localhost:8000
+## 🎮 Configuration OBS Studio
+
+### Paramètres de Stream
+1. Ouvrez OBS Studio
+2. Paramètres → Stream
+3. Service : **Custom**
+4. Serveur : `rtmp://localhost:1935/live`
+5. Clé de stream : `votre_cle_personnalisee`
+
+### Paramètres Recommandés
+- **Encodeur** : x264
+- **Bitrate** : 2500-6000 Kbps
+- **Keyframe Interval** : 2
+- **CPU Preset** : veryfast
+- **Profile** : high
 
 ## 📁 Structure du Projet
 
 ```
-abd-stream/
-├── src/                          # Frontend React
-│   ├── components/               # Composants React
-│   │   ├── AdminPage.tsx         # Panel d'administration
-│   │   ├── HomePage.tsx          # Page d'accueil
-│   │   ├── LiveStreamPage.tsx    # Page de streaming
-│   │   ├── AuthPage.tsx          # Authentification
-│   │   ├── chat/                 # Composants chat
-│   │   └── modals/               # Modales
-│   ├── services/                 # Services (WebSocket)
-│   ├── types/                    # Types TypeScript
-│   └── utils/                    # Utilitaires
-├── server/                       # Backend Node.js
-│   ├── data/                     # Base de données SQLite
-│   ├── media/                    # Fichiers média (M3U8, TS)
-│   ├── config.mjs                # Configuration
-│   ├── database.mjs              # Gestion BDD
-│   ├── server.mjs                # Serveur WebSocket
-│   └── simple-media.mjs          # Serveur média
-└── README.md
+streaming-platform/
+├── src/                        # Frontend React
+│   ├── components/             # Composants
+│   │   ├── AdminPage.tsx       # Panel admin
+│   │   ├── HomePage.tsx        # Page d'accueil
+│   │   ├── LiveStreamPage.tsx  # Lecteur de stream
+│   │   ├── StreamPlayer.tsx    # Composant lecteur
+│   │   └── AuthPage.tsx        # Authentification
+│   ├── services/               # Services
+│   │   └── websocket.ts        # Client WebSocket
+│   ├── types/                  # Types TypeScript
+│   └── utils/                  # Utilitaires
+├── server/                     # Backend Node.js
+│   ├── index.mjs               # Serveur principal
+│   ├── rtmp.mjs                # Serveur RTMP
+│   ├── package.json            # Dépendances backend
+│   └── media/                  # Fichiers HLS générés
+├── supabase/                   # Migrations Supabase
+└── package.json                # Dépendances frontend
 ```
 
-## 🎮 Utilisation
+## 🌐 Utilisation
 
-### 👤 Utilisateur Standard
+### Utilisateur Standard
 
-1. **Connexion** : Créez un compte ou connectez-vous
-2. **Navigation** : 
-   - Accueil : Vue d'ensemble et réseaux sociaux
-   - Streams : Liste des streams disponibles
-   - Chat : Chat global ou par stream
-3. **Streaming** : Cliquez sur un stream pour le regarder
-4. **Chat** : Participez aux discussions en temps réel
+1. **Créer un compte** - Inscription via l'interface
+2. **Regarder les streams** - Voir les streams en direct
+3. **Participer au chat** - Chat global ou par stream
+4. **Signaler du contenu** - Signaler les abus
 
-### 👑 Administrateur
+### Administrateur
 
-1. **Accès Admin** : `Ctrl+Shift+A` → Code `ADMIN_BOLT_2025`
-2. **Gestion des Streams** :
-   - Créer un nouveau stream
-   - Uploader un fichier M3U8
-   - Activer/désactiver les streams
-   - Voir les statistiques
-3. **Modération** :
-   - Gérer les utilisateurs connectés
-   - Modérer le chat
-   - Voir les signalements
-4. **Annonces** : Créer des popups d'annonce
+1. **Accès admin** - Utiliser le code d'accès admin
+2. **Gérer les streams** - Créer/modifier/supprimer
+3. **Modérer les utilisateurs** - Mute/ban
+4. **Voir les statistiques** - Dashboard en temps réel
 
-## 🔧 Gestion des Streams
+## 🔧 API WebSocket
 
-### Création d'un Stream
+### Client → Serveur
 
-1. **Panel Admin** → Onglet "Streams"
-2. **"Nouveau Stream"** → Remplir les informations
-3. **Upload M3U8** : Glissez votre fichier .m3u8
-4. **Activation** : Basculer le statut "Actif"
-
-### Format des Fichiers
-
-**Fichier M3U8 exemple** :
-```m3u8
-#EXTM3U
-#EXT-X-VERSION:3
-#EXT-X-TARGETDURATION:10
-#EXT-X-MEDIA-SEQUENCE:0
-#EXTINF:10.0,
-segment0.ts
-#EXTINF:10.0,
-segment1.ts
-#EXT-X-ENDLIST
-```
-
-**Structure des fichiers** :
-```
-server/media/live/
-├── stream-key-1/
-│   ├── index.m3u8
-│   ├── segment0.ts
-│   ├── segment1.ts
-│   └── ...
-└── stream-key-2/
-    ├── index.m3u8
-    └── ...
-```
-
-## 💬 Système de Chat
-
-### Types de Chat
-
-1. **Chat Global** : Quand aucun stream n'est actif
-2. **Chat par Stream** : Spécifique à chaque stream
-3. **Persistance** : Chaque chat garde son historique
-
-### Commandes de Modération
-
-- **Supprimer** : Effacer un message
-- **Mute** : Empêcher un utilisateur d'écrire (temporaire)
-- **Ban** : Bannir définitivement un utilisateur
-- **Signaler** : Signaler un message inapproprié
-
-## 🛠️ Configuration Avancée
-
-### Personnalisation des Ports
-
-Modifiez `server/.env` :
-```env
-WS_PORT=3001      # Port WebSocket
-MEDIA_PORT=8000   # Port serveur média
-```
-
-### Codes d'Accès
-
-Dans `server/config.mjs` :
 ```javascript
-export const SERVER_CONFIG = {
-  ADMIN_ACCESS_CODE: 'ADMIN_BOLT_2025',
-  MODERATOR_PASSWORDS: {
-    'mod': 'mod123',
-    'admin': 'admin123'
-  }
-};
-```
-
-### Base de Données
-
-SQLite avec tables :
-- `users` : Utilisateurs enregistrés
-- `chat_messages` : Messages du chat
-- `connected_users` : Utilisateurs connectés
-- `banned_users` : Utilisateurs bannis
-- `muted_users` : Utilisateurs mutes
-
-## 🐛 Dépannage
-
-### Port Occupé
-```bash
-# Windows
-netstat -ano | findstr :3001
-taskkill /PID <PID> /F
-
-# Linux/Mac
-lsof -ti:3001 | xargs kill -9
-```
-
-### Problème WebSocket
-1. Vérifiez que le serveur backend est démarré
-2. Consultez la console du navigateur (F12)
-3. Redémarrez avec `npm run dev:full`
-
-### Fichiers M3U8
-1. Vérifiez le format du fichier
-2. Assurez-vous que les segments .ts sont présents
-3. Vérifiez les permissions des fichiers
-
-## 📊 API WebSocket
-
-### Messages Client → Serveur
-```javascript
-// Connexion utilisateur
+// Informations utilisateur
 {
   type: 'user_info',
   username: 'string',
@@ -270,7 +173,10 @@ lsof -ti:3001 | xargs kill -9
 // Message chat
 {
   type: 'chat_message',
-  message: ChatMessage
+  message: {
+    text: 'string',
+    username: 'string'
+  }
 }
 
 // Rejoindre un stream
@@ -278,9 +184,22 @@ lsof -ti:3001 | xargs kill -9
   type: 'join_stream',
   streamKey: 'string'
 }
+
+// Quitter un stream
+{
+  type: 'leave_stream'
+}
+
+// Action admin
+{
+  type: 'admin_action',
+  action: 'mute_user' | 'ban_user',
+  targetUserId: 'string'
+}
 ```
 
-### Messages Serveur → Client
+### Serveur → Client
+
 ```javascript
 // Nombre d'utilisateurs
 {
@@ -288,50 +207,132 @@ lsof -ti:3001 | xargs kill -9
   count: number
 }
 
-// Message chat reçu
+// Liste des streams actifs
+{
+  type: 'active_streams',
+  streams: Stream[]
+}
+
+// Nouveau message chat
 {
   type: 'chat_message',
   message: ChatMessage
 }
 
-// Statut stream
+// Stream détecté
 {
-  type: 'stream_status',
-  status: 'live' | 'offline'
+  type: 'stream_detected',
+  stream: Stream
+}
+
+// Stream terminé
+{
+  type: 'stream_ended',
+  streamKey: 'string'
 }
 ```
 
-## 🔐 Sécurité
+## 🔐 Sécurité avec Supabase
 
-### Authentification
-- Mots de passe hashés avec bcrypt
-- Sessions sécurisées
-- Protection CSRF
+### Row Level Security (RLS)
 
-### Modération
-- Système de mute progressif (5min → 15min → 30min → 1h → permanent)
-- Ban par IP et fingerprint
-- Logs de toutes les actions
+Toutes les tables ont RLS activé avec des policies restrictives :
 
-### Anonymat
-- Pas de tracking
-- Données minimales collectées
-- Chiffrement des communications
+- **profiles** - Users peuvent lire tous les profils, modifier le leur
+- **streams** - Lecture pour tous, écriture pour admins/mods
+- **chat_messages** - Lecture pour tous, insertion pour authenticated, suppression pour admins
+- **banned_users** - Lecture/écriture pour admins uniquement
+- **muted_users** - Lecture/écriture pour admins uniquement
+
+### Système de Mute Progressif
+
+1. **1ère infraction** - 5 minutes
+2. **2ème infraction** - 15 minutes
+3. **3ème infraction** - 30 minutes
+4. **4ème infraction** - 1 heure
+5. **5ème infraction** - Permanent
+
+## 🛠️ Dépannage
+
+### Port déjà utilisé
+```bash
+# Windows
+netstat -ano | findstr :3000
+taskkill /PID <PID> /F
+
+# Linux/Mac
+lsof -ti:3000 | xargs kill -9
+```
+
+### FFmpeg non trouvé
+- **Windows** : Installer FFmpeg dans `C:\ffmpeg\bin\`
+- **Linux** : `sudo apt install ffmpeg`
+- **Mac** : `brew install ffmpeg`
+
+### WebSocket déconnecté
+1. Vérifier que le serveur backend est lancé
+2. Vérifier la console navigateur (F12)
+3. Vérifier les variables d'environnement Supabase
+
+### Stream ne s'affiche pas
+1. Vérifier que le serveur RTMP est lancé
+2. Vérifier les logs FFmpeg
+3. Vérifier que les fichiers HLS sont générés dans `server/media/live/`
+
+## 📊 Migrations Supabase
+
+Les migrations sont dans `supabase/migrations/` :
+
+```sql
+-- Exemple de migration
+create_streaming_platform_schema.sql
+```
+
+Pour appliquer les migrations manuellement :
+```bash
+# Via Supabase Dashboard
+# SQL Editor → Coller le contenu de la migration → Run
+```
+
+## 🔄 Workflow de Streaming
+
+1. **OBS Stream** → Serveur RTMP (port 1935)
+2. **RTMP** → FFmpeg conversion → HLS (fichiers .m3u8 et .ts)
+3. **HLS** → Serveur HTTP (port 8003)
+4. **Frontend** → Lecture HLS via HLS.js
+5. **Backend** → Notification WebSocket aux clients
+6. **Supabase** → Stockage des métadonnées du stream
+
+## 📝 Scripts Disponibles
+
+```bash
+# Frontend
+npm run dev          # Lancer le dev server
+npm run build        # Build production
+npm run preview      # Preview du build
+
+# Backend
+npm run server       # Lancer le serveur principal
+npm run rtmp         # Lancer le serveur RTMP
+
+# Serveur (dans /server)
+npm start            # Serveur WebSocket/API
+npm run rtmp         # Serveur RTMP
+```
 
 ## 🤝 Contribution
 
 1. Fork le projet
-2. Créez une branche (`git checkout -b feature/nouvelle-fonctionnalite`)
-3. Committez (`git commit -am 'Ajout nouvelle fonctionnalité'`)
-4. Push (`git push origin feature/nouvelle-fonctionnalite`)
-5. Créez une Pull Request
+2. Créez une branche (`git checkout -b feature/nouvelle-feature`)
+3. Committez (`git commit -m 'Ajout nouvelle feature'`)
+4. Push (`git push origin feature/nouvelle-feature`)
+5. Ouvrez une Pull Request
 
+## 📄 Licence
 
-## 🆘 Support
-
-- **Issues** : Utilisez GitHub Issues
+Ce projet est sous licence MIT.
 
 ---
 
-**Version 4.0 - Plateforme Complète**
-*Développé avec ❤️ par l'équipe ABD Stream*
+**Version 5.0 - Architecture Supabase**
+*Plateforme de streaming moderne avec chat en temps réel*
