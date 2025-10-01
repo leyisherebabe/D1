@@ -124,6 +124,49 @@ class Database {
         }
       });
     });
+
+    this.migrateDiscordColumns();
+  }
+
+  migrateDiscordColumns() {
+    this.db.all(`PRAGMA table_info(users)`, (err, columns) => {
+      if (err) {
+        console.error('Erreur vérification colonnes:', err);
+        return;
+      }
+
+      const columnNames = columns.map(c => c.name);
+
+      if (!columnNames.includes('discord_id')) {
+        this.db.run('ALTER TABLE users ADD COLUMN discord_id TEXT', (err) => {
+          if (err && !err.message.includes('duplicate column')) {
+            console.error('Erreur ajout discord_id:', err);
+          } else {
+            console.log('✅ Colonne discord_id ajoutée');
+          }
+        });
+      }
+
+      if (!columnNames.includes('discord_username')) {
+        this.db.run('ALTER TABLE users ADD COLUMN discord_username TEXT', (err) => {
+          if (err && !err.message.includes('duplicate column')) {
+            console.error('Erreur ajout discord_username:', err);
+          } else {
+            console.log('✅ Colonne discord_username ajoutée');
+          }
+        });
+      }
+
+      if (!columnNames.includes('expires_at')) {
+        this.db.run('ALTER TABLE users ADD COLUMN expires_at DATETIME', (err) => {
+          if (err && !err.message.includes('duplicate column')) {
+            console.error('Erreur ajout expires_at:', err);
+          } else {
+            console.log('✅ Colonne expires_at ajoutée');
+          }
+        });
+      }
+    });
   }
 
   run(sql, params = []) {
