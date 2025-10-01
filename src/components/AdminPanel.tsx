@@ -761,7 +761,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                       <div>
                         <div className="font-medium">{log.action_type}</div>
                         <div className="text-sm text-slate-400">
-                          {log.username} - {log.details}
+                          {typeof log.username === 'object' ? JSON.stringify(log.username) : log.username} - {typeof log.details === 'object' ? JSON.stringify(log.details) : log.details}
                         </div>
                       </div>
                     </div>
@@ -906,7 +906,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   {bannedUsers.map(ban => (
                     <div key={ban.id} className="p-4 bg-slate-900/50 rounded-xl border border-red-500/20">
                       <div className="flex items-center justify-between mb-2">
-                        <div className="font-medium">{ban.username}</div>
+                        <div className="font-medium">{typeof ban.username === 'object' ? JSON.stringify(ban.username) : ban.username}</div>
                         <button
                           onClick={() => handleUnbanUser(ban)}
                           disabled={isLoading}
@@ -916,9 +916,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         </button>
                       </div>
                       <div className="text-sm text-slate-400 space-y-1">
-                        <div>IP: {ban.ip}</div>
-                        <div>Raison: {ban.reason}</div>
-                        <div>Par: {ban.banned_by}</div>
+                        <div>IP: {typeof ban.ip === 'object' ? JSON.stringify(ban.ip) : ban.ip}</div>
+                        <div>Raison: {typeof ban.reason === 'object' ? JSON.stringify(ban.reason) : ban.reason}</div>
+                        <div>Par: {typeof ban.banned_by === 'object' ? JSON.stringify(ban.banned_by) : ban.banned_by}</div>
                         <div>Date: {new Date(ban.banned_at).toLocaleString()}</div>
                         {!ban.is_permanent && ban.ban_end_time && (
                           <div>Expire: {new Date(ban.ban_end_time).toLocaleString()}</div>
@@ -938,7 +938,7 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                   {mutedUsers.map(mute => (
                     <div key={mute.id} className="p-4 bg-slate-900/50 rounded-xl border border-orange-500/20">
                       <div className="flex items-center justify-between mb-2">
-                        <div className="font-medium">{mute.username}</div>
+                        <div className="font-medium">{typeof mute.username === 'object' ? JSON.stringify(mute.username) : mute.username}</div>
                         <button
                           onClick={() => handleUnmuteUser(mute)}
                           disabled={isLoading}
@@ -948,9 +948,9 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                         </button>
                       </div>
                       <div className="text-sm text-slate-400 space-y-1">
-                        <div>IP: {mute.ip}</div>
-                        <div>Raison: {mute.reason}</div>
-                        <div>Par: {mute.muted_by}</div>
+                        <div>IP: {typeof mute.ip === 'object' ? JSON.stringify(mute.ip) : mute.ip}</div>
+                        <div>Raison: {typeof mute.reason === 'object' ? JSON.stringify(mute.reason) : mute.reason}</div>
+                        <div>Par: {typeof mute.muted_by === 'object' ? JSON.stringify(mute.muted_by) : mute.muted_by}</div>
                         <div>Mute #{mute.mute_count}</div>
                         <div>Expire: {new Date(mute.mute_end_time).toLocaleString()}</div>
                       </div>
@@ -984,12 +984,12 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
                         <span className={`px-3 py-1 rounded-full text-xs font-medium border ${roleColors[msg.role as keyof typeof roleColors]}`}>
-                          {msg.role}
+                          {typeof msg.role === 'object' ? JSON.stringify(msg.role) : msg.role}
                         </span>
-                        <span className="font-medium">{msg.username}</span>
+                        <span className="font-medium">{typeof msg.username === 'object' ? JSON.stringify(msg.username) : msg.username}</span>
                         <span className="text-sm text-slate-400">{formatTime(msg.timestamp)}</span>
                       </div>
-                      <p className="text-slate-300">{msg.message}</p>
+                      <p className="text-slate-300">{typeof msg.message === 'object' ? JSON.stringify(msg.message) : msg.message}</p>
                     </div>
                     <button
                       onClick={() => handleDeleteMessage(msg.id)}
@@ -1059,10 +1059,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
                             {log.severity}
                           </span>
                         </td>
-                        <td className="px-6 py-4 font-medium">{log.action_type}</td>
-                        <td className="px-6 py-4 text-slate-400">{log.username}</td>
-                        <td className="px-6 py-4 text-slate-400 max-w-md truncate">{log.details}</td>
-                        <td className="px-6 py-4 text-slate-400">{log.admin_username || '-'}</td>
+                        <td className="px-6 py-4 font-medium">{typeof log.action_type === 'object' ? JSON.stringify(log.action_type) : log.action_type}</td>
+                        <td className="px-6 py-4 text-slate-400">{typeof log.username === 'object' ? JSON.stringify(log.username) : log.username}</td>
+                        <td className="px-6 py-4 text-slate-400 max-w-md truncate">{typeof log.details === 'object' ? JSON.stringify(log.details) : log.details}</td>
+                        <td className="px-6 py-4 text-slate-400">{typeof log.admin_username === 'object' ? JSON.stringify(log.admin_username) : (log.admin_username || '-')}</td>
                         <td className="px-6 py-4 text-slate-400">{new Date(log.created_at).toLocaleString()}</td>
                       </tr>
                     ))}
