@@ -2,13 +2,84 @@ import React, { useState, useEffect } from 'react';
 import { Shield, Users, Activity, Settings, Ban, VolumeX, Trash2, Eye, Crown, Search, Clock, TriangleAlert as AlertTriangle, UserX, MessageSquare, Download, Filter, RefreshCw, TrendingUp, ChartBar as BarChart3, Zap, Globe, Terminal, Lock, Clock as Unlock, CircleAlert as AlertCircle, CircleCheck as CheckCircle, Circle as XCircle, Play, Pause, Radio, Video, UserCheck, UserPlus, Calendar, Server, Database, Wifi, WifiOff, Info, FileText, Mail, Key, CreditCard as Edit, Save, X as CloseIcon, Bell, Send, Megaphone, Target, List } from 'lucide-react';
 import { ConnectedUser, ChatMessage, StreamSource } from '../types';
 import { formatTime } from '../utils';
-import {
-  UserProfileModal,
-  BroadcastModal,
-  AutoModRulesModal,
-  IPBlacklistModal,
-  AnalyticsChart
-} from './admin';
+
+const UserProfileModal: React.FC<any> = ({ user, onClose }) => (
+  <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+    <div className="bg-slate-900 rounded-2xl p-6 max-w-2xl w-full">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-xl font-bold">Profil: {user.username}</h3>
+        <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg"><X className="h-5 w-5" /></button>
+      </div>
+      <div className="space-y-2">
+        <div>IP: {user.ip}</div>
+        <div>Role: {user.role}</div>
+        <div>Page: {user.page}</div>
+      </div>
+    </div>
+  </div>
+);
+
+const BroadcastModal: React.FC<any> = ({ onClose, onSend }) => {
+  const [message, setMessage] = useState('');
+  return (
+    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+      <div className="bg-slate-900 rounded-2xl p-6 max-w-2xl w-full">
+        <div className="flex justify-between items-center mb-4">
+          <h3 className="text-xl font-bold">Diffuser un message</h3>
+          <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg"><X className="h-5 w-5" /></button>
+        </div>
+        <textarea
+          value={message}
+          onChange={(e) => setMessage(e.target.value)}
+          className="w-full p-4 bg-slate-800 rounded-xl mb-4"
+          rows={4}
+          placeholder="Votre message..."
+        />
+        <button
+          onClick={() => { onSend(message, 'info'); onClose(); }}
+          className="w-full px-6 py-3 bg-cyan-500 rounded-xl"
+        >
+          Envoyer
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const AutoModRulesModal: React.FC<any> = ({ onClose, onSave }) => (
+  <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+    <div className="bg-slate-900 rounded-2xl p-6 max-w-2xl w-full">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-xl font-bold">Règles de modération automatique</h3>
+        <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg"><X className="h-5 w-5" /></button>
+      </div>
+      <p className="text-slate-400 mb-4">Configuration des règles auto-mod (à venir)</p>
+      <button onClick={onClose} className="w-full px-6 py-3 bg-slate-700 rounded-xl">Fermer</button>
+    </div>
+  </div>
+);
+
+const IPBlacklistModal: React.FC<any> = ({ onClose }) => (
+  <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
+    <div className="bg-slate-900 rounded-2xl p-6 max-w-2xl w-full">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-xl font-bold">Liste noire IP/Fingerprint</h3>
+        <button onClick={onClose} className="p-2 hover:bg-slate-800 rounded-lg"><X className="h-5 w-5" /></button>
+      </div>
+      <p className="text-slate-400 mb-4">Gestion de la blacklist (à venir)</p>
+      <button onClick={onClose} className="w-full px-6 py-3 bg-slate-700 rounded-xl">Fermer</button>
+    </div>
+  </div>
+);
+
+const AnalyticsChart: React.FC<any> = ({ type, timeRange }) => (
+  <div className="bg-slate-800 rounded-2xl p-6 border border-slate-700">
+    <h4 className="font-bold mb-4 capitalize">{type}</h4>
+    <div className="h-48 flex items-center justify-center text-slate-400">
+      Graphique {type} - {timeRange}
+    </div>
+  </div>
+);
 
 interface AdminPanelProps {
   currentUser: any;
