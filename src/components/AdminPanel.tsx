@@ -2,7 +2,6 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { Shield, Users, Activity, Settings, Ban, VolumeX, Trash2, Eye, Server, Database, Radio, BarChart3, Terminal, Crown, Search, Clock, Globe, AlertTriangle, CheckCircle, XCircle, UserX, MessageSquare, Filter, Download } from 'lucide-react';
 import { ConnectedUser, ChatMessage, StreamSource } from '../types';
 import { formatTime } from '../utils';
-import { supabase } from '../lib/supabase';
 
 interface AdminPanelProps {
   currentUser: any;
@@ -44,9 +43,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     severity: 'low' | 'medium' | 'high' | 'critical' = 'medium'
   ) => {
     try {
-      const { error } = await supabase
-        .from('activity_logs')
-        .insert({
+      const response = await fetch('http://localhost:3001/api/logs', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           action_type: actionType,
           username,
           ip_address: details.ip || '',
@@ -54,9 +54,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
           details,
           severity,
           admin_username: currentUser?.username || 'admin'
-        });
+        })
+      });
 
-      if (!error) {
+      if (response.ok) {
         await fetchActivityLogs();
       }
     } catch (err) {
@@ -66,14 +67,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const fetchActivityLogs = useCallback(async () => {
     try {
-      const { data, error } = await supabase
-        .from('activity_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(100);
+      const response = await fetch('http://localhost:3001/api/logs');
+      const data = await response.json();
 
-      if (!error && data) {
-        setActivityLogs(data);
+      if (data.success && data.logs) {
+        setActivityLogs(data.logs);
       }
     } catch (err) {
       console.error('Error fetching logs:', err);
@@ -94,25 +92,25 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
 
     setIsLoading(true);
     try {
-      const { error } = await supabase
-        .from('banned_users')
-        .insert({
+      const response = await fetch('http://localhost:3001/api/admin/ban', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           fingerprint: user.fingerprint,
-          ip_address: user.ip,
+          ip: user.ip,
           username: user.username,
           reason,
-          banned_by: currentUser?.username || 'admin',
-          is_permanent: true
-        });
+          bannedBy: currentUser?.username || 'admin',
+          isPermanent: true
+        })
+      });
 
-      if (!error) {
+      const data = await response.json();
+      if (data.success) {
         wsService?.send({ type: 'ban_user', fingerprint: user.fingerprint });
-        await logAction('USER_BANNED', user.username, {
-          ip: user.ip,
-          fingerprint: user.fingerprint,
-          reason
-        }, 'high');
         alert('✅ Utilisateur banni avec succès');
+      } else {
+        alert('❌ Erreur lors du ban');
       }
     } catch (err) {
       console.error('Error banning user:', err);
@@ -137,30 +135,30 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
     try {
       const muteEndTime = new Date(Date.now() + duration * 60000);
 
-      const { error } = await supabase
-        .from('muted_users')
-        .insert({
+      const response = await fetch('http://localhost:3001/api/admin/mute', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
           fingerprint: user.fingerprint,
           username: user.username,
-          ip_address: user.ip,
+          ip: user.ip,
+          muteEndTime: muteEndTime.toISOString(),
           reason,
-          muted_by: currentUser?.username || 'admin',
-          mute_end_time: muteEndTime.toISOString()
-        });
+          mutedBy: currentUser?.username || 'admin',
+          duration: `${duration}min`
+        })
+      });
 
-      if (!error) {
+      const data = await response.json();
+      if (data.success) {
         wsService?.send({
           type: 'mute_user',
           fingerprint: user.fingerprint,
           duration: duration * 60000
         });
-        await logAction('USER_MUTED', user.username, {
-          ip: user.ip,
-          fingerprint: user.fingerprint,
-          duration: `${duration}min`,
-          reason
-        }, 'medium');
         alert('✅ Utilisateur mute avec succès');
+      } else {
+        alert('❌ Erreur lors du mute');
       }
     } catch (err) {
       console.error('Error muting user:', err);

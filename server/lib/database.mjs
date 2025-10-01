@@ -99,6 +99,18 @@ class Database {
         started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         ended_at DATETIME,
         is_live BOOLEAN DEFAULT 1
+      )`,
+
+      `CREATE TABLE IF NOT EXISTS activity_logs (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        action_type TEXT NOT NULL,
+        username TEXT,
+        ip_address TEXT,
+        fingerprint TEXT,
+        details TEXT,
+        severity TEXT DEFAULT 'low',
+        admin_username TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`
     ];
 
@@ -292,6 +304,29 @@ class Database {
 
   async getActiveStreams() {
     return await this.all(`SELECT * FROM streams WHERE is_live = 1`);
+  }
+
+  async addActivityLog(logData) {
+    const sql = `INSERT INTO activity_logs
+                 (action_type, username, ip_address, fingerprint, details, severity, admin_username)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)`;
+    return await this.run(sql, [
+      logData.action_type,
+      logData.username || '',
+      logData.ip_address || '',
+      logData.fingerprint || '',
+      JSON.stringify(logData.details || {}),
+      logData.severity || 'low',
+      logData.admin_username || 'system'
+    ]);
+  }
+
+  async getActivityLogs(limit = 100) {
+    const logs = await this.all(`SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT ?`, [limit]);
+    return logs.map(log => ({
+      ...log,
+      details: log.details ? JSON.parse(log.details) : {}
+    }));
   }
 
   close() {

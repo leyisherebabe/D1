@@ -657,6 +657,92 @@ server.on('request', (req, res) => {
       activeStreams: activeStreams.size,
       uptime: process.uptime()
     }));
+  } else if (req.url === '/api/logs' && req.method === 'GET') {
+    db.getActivityLogs(100).then(logs => {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: true, logs }));
+    }).catch(err => {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ success: false, error: err.message }));
+    });
+  } else if (req.url === '/api/logs' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', () => {
+      try {
+        const logData = JSON.parse(body);
+        db.addActivityLog(logData).then(() => {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: true }));
+        }).catch(err => {
+          res.writeHead(500, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ success: false, error: err.message }));
+        });
+      } catch (error) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, message: 'Invalid JSON' }));
+      }
+    });
+  } else if (req.url === '/api/admin/ban' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body);
+        await db.banUser({
+          fingerprint: data.fingerprint,
+          ip: data.ip,
+          username: data.username,
+          reason: data.reason,
+          bannedBy: data.bannedBy,
+          isPermanent: data.isPermanent !== false
+        });
+        await db.addActivityLog({
+          action_type: 'USER_BANNED',
+          username: data.username,
+          ip_address: data.ip,
+          fingerprint: data.fingerprint,
+          details: { reason: data.reason },
+          severity: 'high',
+          admin_username: data.bannedBy
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      }
+    });
+  } else if (req.url === '/api/admin/mute' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => body += chunk.toString());
+    req.on('end', async () => {
+      try {
+        const data = JSON.parse(body);
+        await db.muteUser({
+          fingerprint: data.fingerprint,
+          username: data.username,
+          ip: data.ip,
+          muteEndTime: data.muteEndTime,
+          reason: data.reason,
+          mutedBy: data.mutedBy
+        });
+        await db.addActivityLog({
+          action_type: 'USER_MUTED',
+          username: data.username,
+          ip_address: data.ip,
+          fingerprint: data.fingerprint,
+          details: { reason: data.reason, duration: data.duration },
+          severity: 'medium',
+          admin_username: data.mutedBy
+        });
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true }));
+      } catch (error) {
+        res.writeHead(500, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: false, error: error.message }));
+      }
+    });
   } else {
     res.writeHead(404);
     res.end();
