@@ -141,26 +141,28 @@ function stopHLSConversion(streamKey) {
   }
 }
 
-nms.on('prePublish', (id, StreamPath, args) => {
-  // Vérifier que StreamPath existe
-  if (!StreamPath) {
+nms.on('prePublish', (id, streamPath, args) => {
+  console.log('[RTMP] prePublish args:', { id, streamPath, args });
+
+  // Vérifier que streamPath existe
+  if (!streamPath) {
     console.error('[RTMP] StreamPath undefined!');
     return;
   }
 
-  // Nettoyer le StreamPath pour extraire la clé
-  let streamKey = StreamPath.replace('/live/', '').replace('//', '');
+  // Nettoyer le streamPath pour extraire la clé
+  let streamKey = streamPath.replace('/live/', '').replace('//', '');
 
   // Si le streamKey commence par /, le retirer
   if (streamKey.startsWith('/')) {
     streamKey = streamKey.substring(1);
   }
 
-  console.log(`[RTMP] 🔴 Stream démarré: ${streamKey} (path: ${StreamPath})`);
+  console.log(`[RTMP] 🔴 Stream démarré: ${streamKey} (path: ${streamPath})`);
 
   activeStreams.set(streamKey, {
     id: id,
-    streamPath: StreamPath,
+    streamPath: streamPath,
     startTime: new Date(),
     isLive: true
   });
@@ -168,22 +170,22 @@ nms.on('prePublish', (id, StreamPath, args) => {
   setTimeout(() => startHLSConversion(streamKey), 3000);
 });
 
-nms.on('donePublish', (id, StreamPath, args) => {
-  // Vérifier que StreamPath existe
-  if (!StreamPath) {
+nms.on('donePublish', (id, streamPath, args) => {
+  // Vérifier que streamPath existe
+  if (!streamPath) {
     console.error('[RTMP] StreamPath undefined!');
     return;
   }
 
-  // Nettoyer le StreamPath pour extraire la clé
-  let streamKey = StreamPath.replace('/live/', '').replace('//', '');
+  // Nettoyer le streamPath pour extraire la clé
+  let streamKey = streamPath.replace('/live/', '').replace('//', '');
 
   // Si le streamKey commence par /, le retirer
   if (streamKey.startsWith('/')) {
     streamKey = streamKey.substring(1);
   }
 
-  console.log(`[RTMP] ⏹️ Stream arrêté: ${streamKey} (path: ${StreamPath})`);
+  console.log(`[RTMP] ⏹️ Stream arrêté: ${streamKey} (path: ${streamPath})`);
 
   if (streamTimeouts.has(streamKey)) {
     clearInterval(streamTimeouts.get(streamKey));
