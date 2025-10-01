@@ -238,8 +238,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         }
       });
       const data = await response.json();
-      if (data.success) {
-        setActivityLogs(data.data);
+      if (data.success && data.logs) {
+        setActivityLogs(data.logs);
       }
     } catch (error) {
       console.error('Error fetching activity logs:', error);
@@ -254,8 +254,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         }
       });
       const data = await response.json();
-      if (data.success) {
-        setBannedUsers(data.data);
+      if (data.success && data.users) {
+        setBannedUsers(data.users);
       }
     } catch (error) {
       console.error('Error fetching banned users:', error);
@@ -270,8 +270,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         }
       });
       const data = await response.json();
-      if (data.success) {
-        setMutedUsers(data.data);
+      if (data.success && data.users) {
+        setMutedUsers(data.users);
       }
     } catch (error) {
       console.error('Error fetching muted users:', error);
@@ -286,8 +286,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({
         }
       });
       const data = await response.json();
-      if (data.success) {
-        setStreamStats(prev => ({ ...prev, ...data.data }));
+      if (data.success && data.stats) {
+        setStreamStats(prev => ({ ...prev, ...data.stats }));
       }
     } catch (error) {
       console.error('Error fetching stream stats:', error);
